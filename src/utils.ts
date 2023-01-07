@@ -11,8 +11,16 @@ declare global {
 }
 
 Number.prototype.pad = function (base: number): string {
-       let nr = Number(this), len = (String(base).length - String(nr).length)+1;
-       return len > 0? new Array(len).join('0') + nr : nr.toString(base);
+    const s = String(this);
+    const len = s.length;
+
+    if (len >= base)
+        return s;
+
+    return new Array(base - len + 1).join('0') + s;
+
+    // let nr = Number(this), len = (String(base).length - String(nr).length)+1;
+    // return len > 0? new Array(len).join('0') + nr : nr.toString(base);
 };
 
 Number.prototype.hex = function () {

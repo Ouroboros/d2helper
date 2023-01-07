@@ -14,6 +14,7 @@ interface ID2Addrs {
         MouseY              : NativePointer;
 
         GetPlayerUnit       : NativeFunction<NativePointer, []>;
+        PrintGameString     : NativeFunction<void, [NativePointer, number]>;
     }
 
     D2Common: {
@@ -35,9 +36,15 @@ class D2Base {
 }
 
 class HurricaneMonitor {
-    _active  : boolean = false;
-    retry   : boolean = false;
-    maxRetry: number  = 0;
+    _active         : boolean   = false;
+    duration        : number    = 0;
+    startTime       : number    = 0;
+    nextCastTime    : number    = 0;
+    actionQueue     : HurricaneMonitor.Action[] = [];
+
+    constructor() {
+        this.setupCastHurricaneTimer();
+    }
 
     get active(): boolean {
         return this._active;
@@ -48,109 +55,247 @@ class HurricaneMonitor {
         this._active = active;
     }
 
-    onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
-        // utils.log(`active: ${this.active}`);
+    printGameString(msg: string) {
+        utils.log(msg);
+        // D2Game.D2Client.PrintGameString(`$$8${msg}`);
+    }
 
-        // if (this.retry && this.active) {
-        //     utils.log(`castHurricane retry @ <${D2GSCmd[packetId]}>: ${this.maxRetry}`);
-        //     this.maxRetry--;
-        //     this.castHurricane();
-        //     this.retry = false;
-        // }
+    onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
+        switch (D2Game.D2Common.getCurrentAreaID()) {
+            case D2AreaID.None:
+            case D2AreaID.RogueEncampment:
+            case D2AreaID.LutGholein:
+            case D2AreaID.KurastDocks:
+            case D2AreaID.PandemoniumFortress:
+            case D2AreaID.Harrogath:
+                this.active = false;
+                return;
+
+            default:
+                this.active = true;
+                break;
+        }
 
         switch (packetId) {
             case D2GSCmd.MAPREVEAL:
-                switch (D2Game.D2Common.getCurrentAreaID()) {
-                    case D2AreaID.None:
-                    case D2AreaID.RogueEncampment:
-                    case D2AreaID.LutGholein:
-                    case D2AreaID.KurastDocks:
-                    case D2AreaID.PandemoniumFortress:
-                    case D2AreaID.Harrogath:
-                        this.active = false;
-                        return;
-
-                    default:
-                        this.active = true;
-                        break;
-                }
                 break;
 
             case D2GSCmd.SETSTATE:
             {
                 const state = new D2GSPacket.SetState(payload.ptr);
 
-                if (state.state == D2StateID.Hurricane)
+                if (state.state == D2StateID.Hurricane) {
                     this.active = true;
+                    this.startTime = (new Date).getTime();
+                }
 
                 break;
             }
 
             case D2GSCmd.ENDSTATE:
             {
-                // utils.log('ENDSTATE1');
                 if (!this.active)
                     return;
-
-                // utils.log('ENDSTATE2');
 
                 const state = new D2GSPacket.EndState(payload.ptr);
 
                 if (state.state != D2StateID.Hurricane)
                     return;
 
-                // utils.log('ENDSTATE3');
+                if (this.duration == 0 && this.startTime != 0) {
+                    this.duration = ((new Date).getTime() - this.startTime) / 1000;
+                    this.duration = Math.max(this.duration, 10);
+                    this.duration = Math.min(this.duration, 50);
+                    this.duration = Math.floor(this.duration);
 
-                this.maxRetry = 5;
-                D2Game.D2Net.delaySend = true;
+                    this.startTime = 0;
 
-                this.castHurricane();
+                    utils.log(`duration: ${this.duration}`);
+                }
 
-                const intervalId = setInterval(
-                    () => {
-                        if (this.maxRetry == 0 || D2Game.D2Client.hasState(D2StateID.Hurricane)) {
-                            D2Game.D2Client.scheduleOnMainThread(() => {
-                                D2Game.D2Net.flushSendPending();
-                            });
-
-                            this.retry = false;
-                            this.maxRetry = 0;
-                            clearInterval(intervalId);
-                            return;
-                        }
-
-                        this.retry = true;
-
-                        D2Game.D2Client.scheduleOnMainThread(() => {
-                            if (this.retry && this.active) {
-                                utils.log(`castHurricane retry: ${this.maxRetry}`);
-                                this.maxRetry--;
-                                this.castHurricane();
-                            }
-
-                            this.retry = false;
-                        });
-                    },
-                    500
-                );
-
+                this.pushTimerAction(HurricaneMonitor.Action.EndState);
                 break;
             }
 
             case D2GSCmd.GAMEEXIT:
                 this.active = false;
+                this.startTime = 0;
+                this.duration = 0;
                 break;
         }
     }
 
+    pushTimerAction(action: HurricaneMonitor.Action) {
+        utils.log(`pushTimerAction: ${HurricaneMonitor.Action[action]}`);
+        this.actionQueue.push(action);
+    }
+
+    setupCastHurricaneTimer() {
+        let maxRetry                  = 0;
+        let nextRetryTime             = 0;
+        let autoCastTime              = 0;
+        let autoCastTimeRetry         = 0;
+        let currentAction             = HurricaneMonitor.Action.Idle;
+        let timerId: NodeJS.Timer | undefined;
+
+        const RetryInterval           = 500;
+        const MaxRetryTimes           = 5;
+        const MaxAutoCastRetryTimes   = 2;
+
+        const nextAction = () => {
+            const a = this.actionQueue.pop();
+            return a === undefined ? HurricaneMonitor.Action.Idle : a;
+        }
+
+        const setAutoCastTime = (now: number, reset: boolean = false) => {
+            if (reset)
+                autoCastTimeRetry = 0;
+
+            if (autoCastTimeRetry == 0) {
+                autoCastTime = now + (this.duration - 5) * 1000;
+                autoCastTimeRetry = MaxAutoCastRetryTimes;
+
+            } else {
+                autoCastTimeRetry--;
+                autoCastTime = now + 200;
+            }
+
+            const t = new Date(new Date(autoCastTime).getTime() + 8 * 3600 * 1000);
+            this.printGameString(`nextCastTime<${timerId}>: ${t.getHours().pad(2)}:${t.getMinutes().pad(2)}:${t.getSeconds().pad(2)}.${t.getMilliseconds().pad(3)}`);
+        }
+
+        timerId = setInterval(() => {
+            const now = (new Date).getTime();
+
+            switch (currentAction) {
+                case HurricaneMonitor.Action.Idle:
+                {
+                    maxRetry = 0;
+                    nextRetryTime = 0;
+
+                    if (!this.active) {
+                        autoCastTimeRetry = 0;
+                        autoCastTime = 0;
+                        return;
+                    }
+
+                    if (autoCastTime != 0 && now >= autoCastTime) {
+                        this.printGameString('auto cast');
+
+                        setAutoCastTime(now);
+
+                        D2Game.D2Client.scheduleOnMainThread(() => {
+                            this.castHurricane();
+                        });
+
+                        return;
+                    }
+
+                    break;
+                }
+
+                case HurricaneMonitor.Action.EndState:
+                {
+                    if (!this.active || maxRetry == 0 || D2Game.D2Client.hasState(D2StateID.Hurricane)) {
+                        D2Game.D2Client.scheduleOnMainThread(() => {
+                            D2Game.D2Net.flushSendPending();
+                        });
+
+                        maxRetry = 0;
+
+                        if (this.active && this.duration != 0 && D2Game.D2Client.hasState(D2StateID.Hurricane)) {
+                            setAutoCastTime(now, true);
+                        }
+
+                        break;
+                    }
+
+                    if (nextRetryTime != 0 && now < nextRetryTime) {
+                        return;
+                    }
+
+                    if (nextRetryTime == 0 && maxRetry == MaxRetryTimes) {
+                        D2Game.D2Net.delaySend = true;
+                    }
+
+                    nextRetryTime = now + RetryInterval;
+
+                    D2Game.D2Client.scheduleOnMainThread(() => {
+                        if (maxRetry != 0 && this.active) {
+                            this.printGameString(`castHurricane retry: ${maxRetry}`);
+                            maxRetry--;
+                            this.castHurricane();
+                        }
+                    });
+
+                    return;
+                }
+            }
+
+            currentAction = nextAction();
+
+            switch (currentAction) {
+                case HurricaneMonitor.Action.EndState:
+                    maxRetry = MaxRetryTimes;
+                    break;
+            }
+
+        }, 100);
+    }
+
+    autoCastHurricane(): NodeJS.Timer {
+        let maxRetry = 5;
+        let retry = true;
+        D2Game.D2Net.delaySend = true;
+
+        this.castHurricane();
+
+        const intervalId = setInterval(
+            () => {
+                if (!this.active || maxRetry == 0 || D2Game.D2Client.hasState(D2StateID.Hurricane)) {
+                    clearInterval(intervalId);
+
+                    D2Game.D2Client.scheduleOnMainThread(() => {
+                        D2Game.D2Net.flushSendPending();
+                    });
+
+                    retry = false;
+                    maxRetry = 0;
+
+                    if (this.active && this.duration != 0 && D2Game.D2Client.hasState(D2StateID.Hurricane)) {
+                        this.nextCastTime = (new Date).getTime() + (this.duration - 3) * 1000;
+                        this.printGameString(`nextCastTime: ${new Date(this.nextCastTime)}`);
+                    }
+
+                    return;
+                }
+
+                retry = true;
+
+                D2Game.D2Client.scheduleOnMainThread(() => {
+                    if (retry && this.active) {
+                        this.printGameString(`castHurricane retry: ${maxRetry}`);
+                        maxRetry--;
+                        this.castHurricane();
+                    }
+
+                    retry = false;
+                });
+            },
+            500
+        );
+
+        return intervalId;
+    }
+
     castHurricane() {
-        utils.log(`castHurricane`);
+        this.printGameString(`castHurricane`);
 
         const x = D2Game.D2Client.playerLocation.x;
         const y = D2Game.D2Client.playerLocation.y;
 
         if (x == 0 || y == 0) {
-            utils.log('missing playerLocation');
+            this.printGameString('missing playerLocation');
             return;
         }
 
@@ -164,6 +309,13 @@ class HurricaneMonitor {
 
         if (leftSkill != D2SkillID.None && leftSkill != D2SkillID.Hurricane)
             D2Game.D2Client.selectSkill(true, leftSkill);
+    }
+}
+
+namespace HurricaneMonitor {
+    export enum Action {
+        Idle,
+        EndState,
     }
 }
 
@@ -220,7 +372,7 @@ class D2Net extends D2Base {
 
             const now1 = new Date;
             const now = new Date(now1.getTime() + 8 * 3600 * 1000);
-            const time = `[${now.getHours().pad(10)}:${now.getMinutes().pad(10)}:${now.getSeconds().pad(10)}.${now.getMilliseconds().pad(100)}]`;
+            const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
             console.log(`${time} <${D2ClientCmd[type]}:${type.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
         }
 
@@ -578,6 +730,7 @@ class D2Net extends D2Base {
             case D2GSCmd.NPC_HEAL:
             case D2GSCmd.NPC_MOVETOENTITY:
             case D2GSCmd.NPC_ATTACK:
+            case D2GSCmd.NPC_INFO:
             case D2GSCmd.RELATOR1:
             case D2GSCmd.RELATOR2:
             case D2GSCmd.DARKNESS:
@@ -588,17 +741,37 @@ class D2Net extends D2Base {
             case D2GSCmd.ITEM_WORLD:
             case D2GSCmd.MULTISTATES:
             case D2GSCmd.OBJECTSTATE:
-            case D2GSCmd.SETSTATE:
-            case D2GSCmd.DELAYSTATE:
-            case D2GSCmd.ENDSTATE:
             case D2GSCmd.ITEM_OWNED:
             case D2GSCmd.UPDATEITEM_OSKILL:
             case D2GSCmd.UNITCASTSKILL_TARGET:
+            case D2GSCmd.CHAT:
+            case D2GSCmd.EVENTMESSAGES:
+            case D2GSCmd.PLAYERKILLCOUNT:
+            case D2GSCmd.ADDEXP_BYTE:
+            case D2GSCmd.ADDEXP_WORD:
+            case D2GSCmd.ADDEXP_DWORD:
+            case D2GSCmd.SETATTR_BYTE:
+            case D2GSCmd.SETATTR_WORD:
+            case D2GSCmd.SETATTR_DWORD:
+            case D2GSCmd.PLAYERINPROXIMITY:
+            case D2GSCmd.MERCREVIVECOST:
+            case D2GSCmd.GAME_QUESTS_AVAILABILITY:
+            case D2GSCmd.PLAYERQUESTINFO:
+            case D2GSCmd.GAMEQUESTLOG:
+            case D2GSCmd.PORTAL_FLAGS:
+            case D2GSCmd.ASSIGNHOTKEY:
+            case D2GSCmd.CMNCOF:
+            case D2GSCmd.ASSIGNPLAYERTOPARTY:
+            case D2GSCmd.LOADACT:
+
+            // case D2GSCmd.SETSTATE:
+            // case D2GSCmd.DELAYSTATE:
+            // case D2GSCmd.ENDSTATE:
                 // break;
                 return;
         }
 
-        // utils.log(`ValidatePacket: ${D2GSCmd[packetId]}\n${hexdump(payload)}\n`);
+        utils.log(`ValidatePacket: ${D2GSCmd[packetId]}\n${hexdump(payload)}\n`);
     }
 
     flushSendPending() {
@@ -640,6 +813,7 @@ class D2Net extends D2Base {
                 break;
 
             case D2GSCmd.SETSTATE:
+            case D2GSCmd.DELAYSTATE:
                 this.onSetState(new D2GSPacket.SetState(payload.ptr));
                 break;
 
@@ -681,9 +855,12 @@ class D2Net extends D2Base {
     }
 
     onSetState(state: D2GSPacket.SetState) {
-        if (state.state == D2StateID.Hurricane) {
-            utils.log(`set state: ${state.state.hex()}`);
-            D2Game.D2Client.addState(state.state);
+        switch (state.state) {
+            case D2StateID.SkillCooldown:
+            case D2StateID.Hurricane:
+                utils.log(`set state: ${state.state.hex()}`);
+                D2Game.D2Client.addState(state.state);
+                break;
         }
     }
 
@@ -713,11 +890,43 @@ class D2Client extends D2Base {
     playerLocation  : {x: number, y: number} = {x: 0, y: 0};
     queue           : (() => void)[] = [];
 
+    hook() {
+        const mainThreadId = Process.enumerateThreads()[0].id;
+
+        const PeekMessageA = Interceptor2.jmp(
+            API.USER32.PeekMessageA,
+            (msg: NativePointer, hWnd: NativePointer, msgFilterMin: number, msgFilterMax: number, removeMsg: number): number => {
+                const success = PeekMessageA(msg, hWnd, msgFilterMin, msgFilterMax, removeMsg);
+
+                if (!success && mainThreadId == Process.getCurrentThreadId()) {
+                    this.messageLoop();
+                }
+
+                return success;
+            },
+            'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
+        );
+    }
+
     get MousePos() {
         return {
             X: this.addrs.D2Client.MouseX.readU32(),
             Y: this.addrs.D2Client.MouseY.readU32(),
         };
+    }
+
+    PrintGameString(msg: string, color: number = 0) {
+        const s = utils.UTF16(msg);
+        const len = msg.length * 2;
+        const ch$ = 0x24;
+
+        for (let i = 2; i < len; i += 2) {
+            if (s.add(i).readU16() == ch$ && s.add(i - 2).readU16() == ch$) {
+                s.add(i - 2).writeU32(0x006300FF);
+            }
+        }
+
+        this.addrs.D2Client.PrintGameString(s, color);
     }
 
     hasState(state: number): boolean {
@@ -837,31 +1046,49 @@ export class D2Game {
         D2Game.D2Client = new D2Client(addrs);
         D2Game.D2Common = new D2Common(addrs);
 
-        D2Game.hook(addrs);
+        D2Game.hook();
     }
 
-    static hook(addrs: ID2Addrs) {
+    static hook() {
         D2Game.D2Net.hook();
+        D2Game.D2Client.hook();
 
-        const mainThreadId = Process.enumerateThreads()[0].id;
+        const fopen = Interceptor2.jmp(
+            API.crt.fopen,
+            (path: NativePointer, mode: NativePointer): NativePointer => {
+                const filename = path.readAnsiString();
 
-        const PeekMessageA = Interceptor2.jmp(
-            API.USER32.PeekMessageA,
-            function(msg: NativePointer, hWnd: NativePointer, msgFilterMin: number, msgFilterMax: number, removeMsg: number): number {
-                const success = PeekMessageA(msg, hWnd, msgFilterMin, msgFilterMax, removeMsg);
+                if (filename == 'hackmap\\d2hackmap.cfg') {
+                    const filename2 = utils.UTF8(filename + '.user');
+                    const fp = fopen(filename2, mode);
 
-                if (!success && mainThreadId == Process.getCurrentThreadId()) {
-                    D2Game.D2Client.messageLoop();
+                    if (!fp.isNull()) {
+                        return fp;
+                    }
+                }
+
+                return fopen(path, mode);
+            },
+            'pointer', ['pointer', 'pointer'], 'mscdecl',
+        );
+
+        const CheckTokenMembership = Interceptor2.jmp(
+            API.ADVAPI32.CheckTokenMembership,
+            (tokenHandle: NativePointer, sidToCheck: NativePointer, isMember: NativePointer): number => {
+                const success = CheckTokenMembership(tokenHandle, sidToCheck, isMember);
+                if (success && !isMember.isNull()) {
+                    isMember.writeU32(1);
                 }
 
                 return success;
             },
-            'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
+            'int32', ['pointer', 'pointer', 'pointer'], 'stdcall',
         );
     }
 }
 
 export function main(addrs: ID2Addrs) {
+    Module.load('D2Duck.dll');
     D2Game.init(addrs);
 }
 

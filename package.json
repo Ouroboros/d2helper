@@ -6,8 +6,8 @@
   "main": "src/main.ts",
   "scripts": {
     "prepare": "npm run build",
-    "build": "frida-compile --tsconfig tsconfig.json src/main.ts -o \"D:\\Game\\Diablo II 暗月\\d2helper.js\" -c",
-    "watch": "frida-compile --tsconfig tsconfig.json src/main.ts -o \"D:\\Game\\Diablo II 暗月\\d2helper.js\" -w",
+    "build": "frida-compile --tsconfig tsconfig.json src/main.ts -o \"D:\\Game\\Diablo II 暗月\\Game.js\" -c",
+    "watch": "frida-compile --tsconfig tsconfig.json src/main.ts -o \"D:\\Game\\Diablo II 暗月\\Game.js\" -w",
     "postbuild": ""
   },
   "devDependencies": {

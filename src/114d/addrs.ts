@@ -11,6 +11,7 @@ export const Addrs = {
         MouseY              : Modules.Game.base.add(0x3A6AB0),
 
         GetPlayerUnit       : new NativeFunction(Modules.Game.base.add(0x063DD0), 'pointer', [], 'stdcall'),
+        PrintGameString     : new NativeFunction(Modules.Game.base.add(0x09E3A0), 'void', ['pointer', 'uint8'], 'fastcall'),
 
         // GetMouseXOffset : new NativeFunction(Modules.Game.base.add(0x05AFC0), 'int32', [], 'stdcall'),
     },

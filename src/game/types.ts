@@ -232,6 +232,7 @@ export enum D2SkillID {
 }
 
 export enum D2StateID {
+    SkillCooldown               = 0x79,
     Hurricane                   = 0x90,     // dru-暴风
 }
 
@@ -242,6 +243,17 @@ export enum D2AreaID {
     KurastDocks                 = 0x4B,     // 库拉斯特海港
     PandemoniumFortress         = 0x67,     // 群魔堡垒
     Harrogath                   = 0x6D,     // 哈洛加斯
+}
+
+export enum D2ItemQuality {
+    Crude                       = 1,        // 粗糙的
+    Normal                      = 2,        // 普通的
+    Superior                    = 3,        // 超强的
+    Magic                       = 4,        // 魔法的
+    Set                         = 5,        // 套装的
+    Rare                        = 6,        // 精华的
+    Unique                      = 7,        // 暗金的
+    Crafted                     = 8,        // 手工的
 }
 
 export namespace D2GSPacket {

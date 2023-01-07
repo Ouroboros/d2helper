@@ -5,6 +5,7 @@ const modules = Process.enumerateModules();
 export const Modules = {
     KERNEL32    : Process.getModuleByName('KERNEL32.dll'),
     USER32      : Process.getModuleByName('USER32.dll'),
+    ADVAPI32    : Process.getModuleByName('ADVAPI32.dll'),
     ucrtbase    : Process.getModuleByName('ucrtbase.dll'),
     Game        : modules[0],
 
@@ -27,6 +28,7 @@ export const API = {
     },
 
     WIN32: {
+        LoadLibraryW                : new NativeFunction(Modules.KERNEL32.getExportByName('LoadLibraryW'), 'pointer', ['pointer'], 'stdcall'),
         CreateFileW                 : new NativeFunction(Modules.KERNEL32.getExportByName('CreateFileW'), 'pointer', ['pointer', 'uint32', 'uint32', 'pointer', 'uint32', 'uint32', 'pointer'], 'stdcall'),
         GetFileAttributesA          : new NativeFunction(Modules.KERNEL32.getExportByName('GetFileAttributesA'), 'uint32', ['pointer'], 'stdcall'),
         Sleep                       : new NativeFunction(Modules.KERNEL32.getExportByName('Sleep'), 'void', ['uint32'], 'stdcall'),
@@ -43,5 +45,9 @@ export const API = {
         SetWindowPos                    : new NativeFunction(Modules.USER32.getExportByName('SetWindowPos'), 'uint32', ['pointer', 'pointer', 'int32', 'int32', 'int32', 'int32', 'uint32'], 'stdcall'),
         SetProcessDpiAwarenessContext   : new NativeFunction(Modules.USER32.getExportByName('SetProcessDpiAwarenessContext'), 'uint32', ['int64']),
         PeekMessageA                    : new NativeFunction(Modules.USER32.getExportByName('PeekMessageA'), 'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32']),
+    },
+
+    ADVAPI32: {
+        CheckTokenMembership            : new NativeFunction(Modules.ADVAPI32.getExportByName('CheckTokenMembership'), 'int32', ['pointer', 'pointer', 'pointer'], 'stdcall'),
     },
 };
