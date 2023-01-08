@@ -243,6 +243,7 @@ export enum D2AreaID {
     KurastDocks                 = 0x4B,     // 库拉斯特海港
     PandemoniumFortress         = 0x67,     // 群魔堡垒
     Harrogath                   = 0x6D,     // 哈洛加斯
+    Cow1                        = 0x89,     // 牛一
 }
 
 export enum D2ItemQuality {
@@ -254,6 +255,23 @@ export enum D2ItemQuality {
     Rare                        = 6,        // 精华的
     Unique                      = 7,        // 暗金的
     Crafted                     = 8,        // 手工的
+}
+
+export enum D2StringColor {
+    Default                     = -1,
+    White                       = 0,
+    Red                         = 1,
+    Green                       = 2,
+    Blue                        = 3,
+    Gold                        = 4,
+    Grey                        = 5,
+    Black                       = 6,
+    Gold2                       = 7,
+    Orange                      = 8,
+    Yellow                      = 9,
+    DarkeGreen2                 = 10,
+    Purple                      = 11,
+    DarkGreen                   = 12,
 }
 
 export namespace D2GSPacket {
