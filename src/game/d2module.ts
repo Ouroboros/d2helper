@@ -107,11 +107,11 @@ export class D2Net extends D2Base {
 
         function log(s: string) {
             return;
+
             if (!utils.Logging)
                 return;
 
-            const now1 = new Date;
-            const now = new Date(now1.getTime() + 8 * 3600 * 1000);
+            const now = utils.getCurrentTime()
             const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
             console.log(`${time} <${D2ClientCmd[type]}:${type.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
         }
@@ -444,8 +444,7 @@ export class D2Net extends D2Base {
             {
                 const buf2 = buf.readByteArray(size);
                 if (utils.Logging) {
-                    log(` unknown = ${arg2.hex()}, size = ${size}`);
-                    // console.log(buf2);
+                    log(` unknown = ${arg2.hex()}, size = ${size}\n${hexdump(buf2!)}`);
                 }
                 break;
             }
@@ -744,7 +743,7 @@ export class D2Client extends D2Base {
     joinGame() {
         this.queue = [];
         this.gameLoaded = true;
-        this.gameJoinTime = new Date().getTime();
+        this.gameJoinTime = utils.getCurrentTime().getTime();
     }
 
     exitGame() {

@@ -65,6 +65,31 @@ export class Interceptor2 {
     }
 }
 
+let TimeZoneOffset: number | undefined;
+
+class Date2 extends Date {
+    getTime(): number {
+        return super.getTime() - TimeZoneOffset!;
+    }
+}
+
+export function getCurrentTime(timestamp? : number): Date {
+    const now = timestamp === undefined ? new Date : new Date(timestamp);
+
+    if (TimeZoneOffset === undefined) {
+        TimeZoneOffset = (8 * 3600 + now.getTimezoneOffset() * 60) * 1000;
+        // console.log(`TimeZoneOffset: ${TimeZoneOffset}`);
+        // console.log(`now.getTimezoneOffset: ${now.getTimezoneOffset()}`);
+        // console.log(now);
+    }
+
+    const t = new Date2(now.getTime() + TimeZoneOffset);
+
+    // console.log(t, t.getTime());
+
+    return t;
+}
+
 export function log(format: any, ...args: any[]): void {
     if (!Logging)
         return;
@@ -74,9 +99,10 @@ export function log(format: any, ...args: any[]): void {
     }
 
     // const offset = (8 * 3600 - now.getTimezoneOffset()) / 3600;
-    const now1 = new Date;
-    const now = new Date(now1.getTime() + 8 * 3600 * 1000);
-    const time = sprintf('%02d:%02d:%02d.%03d', now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+    // const now1 = new Date;
+    // const now = new Date(now1.getTime() + 8 * 3600 * 1000);
+    const now = getCurrentTime();
+    const time = sprintf('%02d:%02d:%02d.%03d', now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
     const msg = `${time} ${format}`;
     console.log(msg);
     send({msg: 'log', data: msg});

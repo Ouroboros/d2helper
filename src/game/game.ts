@@ -56,7 +56,8 @@ class HurricaneMonitor {
 
                 if (state.state == D2StateID.Hurricane) {
                     this.active = true;
-                    this.startTime = (new Date).getTime();
+                    // this.startTime = (new Date).getTime();
+                    this.startTime = utils.getCurrentTime().getTime();
                 }
 
                 break;
@@ -73,7 +74,8 @@ class HurricaneMonitor {
                     return;
 
                 if (this.duration == 0 && this.startTime != 0) {
-                    this.duration = ((new Date).getTime() - this.startTime) / 1000;
+                    // this.duration = ((new Date).getTime() - this.startTime) / 1000;
+                    this.duration = (utils.getCurrentTime().getTime() - this.startTime) / 1000;
                     this.duration = Math.max(this.duration, 10);
                     this.duration = Math.min(this.duration, 50);
                     this.duration = Math.floor(this.duration);
@@ -130,12 +132,12 @@ class HurricaneMonitor {
                 autoCastTime = now + 200;
             }
 
-            const t = new Date(new Date(autoCastTime).getTime() + 8 * 3600 * 1000);
+            const t = utils.getCurrentTime();
             utils.log(`nextCastTime<${timerId}>: ${t.getHours().pad(2)}:${t.getMinutes().pad(2)}:${t.getSeconds().pad(2)}.${t.getMilliseconds().pad(3)}`);
         }
 
         timerId = setInterval(() => {
-            const now = (new Date).getTime();
+            const now = utils.getCurrentTime().getTime();
 
             switch (currentAction) {
                 case HurricaneMonitor.Action.Idle:
@@ -152,7 +154,8 @@ class HurricaneMonitor {
                     if (autoCastTime != 0 && now >= autoCastTime) {
                         setAutoCastTime(now);
 
-                        const t = new Date(new Date(autoCastTime).getTime() + 8 * 3600 * 1000);
+                        // const t = new Date(autoCastTime);
+                        const t = utils.getCurrentTime(autoCastTime);
                         this.printPartyString(`nextCastTime<${timerId}>: ${t.getHours().pad(2)}:${t.getMinutes().pad(2)}:${t.getSeconds().pad(2)}.${t.getMilliseconds().pad(3)}`);
                         this.printPartyString('auto Hurricane');
 
@@ -439,8 +442,10 @@ export class D2Game {
         const quality   = this.D2Common.GetItemQuality(item);
         const gameInfo  = this.D2Client.GameInfo;
         const itemIndex = this.getItemIndex(item);
-        const time      = new Date().getTime();
-        const time2     = new Date(time + 8 * 3600 * 1000);
+        // const time      = new Date().getTime();
+        // const time2     = new Date(time + 8 * 3600 * 1000);
+        const time      = utils.getCurrentTime().getTime();
+        const time2     = utils.getCurrentTime();
         const timestr   = `${(time2.getUTCMonth() + 1).pad(2)}.${time2.getUTCDate().pad(2)} ${time2.getHours().pad(2)}:${time2.getMinutes().pad(2)}:${time2.getSeconds().pad(2)}`;
 
         writeString([
