@@ -367,8 +367,23 @@ export class D2Game {
             'int32', ['pointer', 'pointer', 'pointer'], 'stdcall',
         );
 
+        const addrs = function() {
+            const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
+            switch (timestamp) {
+                case 0x6395FBE6:
+                    return {
+                        AutoPickPrintHint: d2duck.base.add(0x256C0),
+                    };
+            }
+
+            return undefined;
+        }();
+
+        if (addrs === undefined)
+            return;
+
         const AutoPickPrintHint = Interceptor2.jmp(
-            d2duck.base.add(0x256C0),
+            addrs.AutoPickPrintHint,
             (prefix: NativePointer, itemUnit: NativePointer) => {
                 AutoPickPrintHint(prefix, itemUnit);
                 this.recordImportItem(new d2types.Unit(itemUnit));
@@ -427,14 +442,14 @@ export class D2Game {
         }
 
         enum D2ItemQualityCN {
-            粗糙的                      = 1,
-            普通的                      = 2,
-            超强的                      = 3,
-            魔法的                      = 4,
-            套装的                      = 5,
-            精华的                      = 6,
-            暗金的                      = 7,
-            手工的                      = 8,
+            粗糙的 = 1,
+            普通的 = 2,
+            超强的 = 3,
+            魔法的 = 4,
+            套装的 = 5,
+            精华的 = 6,
+            暗金的 = 7,
+            手工的 = 8,
         }
 
         const bin       = this.D2Common.GetItemsBIN(item.TxtFileNo);

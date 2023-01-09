@@ -102,12 +102,9 @@ export class D2Net extends D2Base {
     }
 
     private onSendPacket(size: number, arg2: number, buf: NativePointer) {
-        // return;
         const type = buf.readU8();
 
         function log(s: string) {
-            return;
-
             if (!utils.Logging)
                 return;
 
@@ -115,6 +112,8 @@ export class D2Net extends D2Base {
             const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
             console.log(`${time} <${D2ClientCmd[type]}:${type.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
         }
+
+        return;
 
         switch (type) {
             case D2ClientCmd.RUNTOLOCATION:
