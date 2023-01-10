@@ -2,7 +2,7 @@ import * as utils from '../utils';
 import * as d2types from './d2types';
 import { API } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2AreaID, D2ItemQuality, D2StringColor } from './types';
+import { D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2AreaID, D2ItemQuality, D2StringColor, D2UnitType } from './types';
 import { D2Game } from './game';
 
 export interface ID2Addrs {
@@ -20,6 +20,13 @@ export interface ID2Addrs {
         PrintGameString         : NativeFunction<void, [NativePointer, number]>;
         PrintPartyString        : NativeFunction<void, [NativePointer, number]>;
         GetLevelNameFromLevelNo : NativeFunction<NativePointer, [number]>;
+        FindClientSideUnit      : NativeFunction<NativePointer, [number, number]>;
+        FindServerSideUnit      : NativeFunction<NativePointer, [number, number]>;
+        CancelTrade             : NativeFunction<number, []>;
+
+        // unknown
+        sub_486D10              : NativeFunction<number, []>;
+        sub_44DB30              : NativeFunction<number, []>;
     }
 
     D2Common: {
@@ -29,6 +36,7 @@ export interface ID2Addrs {
         GetLevelNoFromRoom      : NativeFunction<number, [NativePointer]>;
         GetItemsBIN             : NativeFunction<NativePointer, [number]>;
         GetItemQuality          : NativeFunction<number, [NativePointer]>;
+        FindNearestUnitFromPos  : NativeFunction<NativePointer, [NativePointer, number, number, number, NativePointer]>;
     }
 
     D2Lang: {
@@ -52,8 +60,11 @@ export class D2Net extends D2Base {
     delaySend       : boolean = false;
     sendPending     : ArrayBuffer2[] = [];
     onRecvCallback  : ((packetId: D2GSCmd, payload: ArrayBuffer2) => void)[] = [];
+    mainThreadId    : number = 0;
 
     hook() {
+        this.mainThreadId = Process.enumerateThreads()[0].id;
+
         const D2Net_SendPacket = Interceptor2.jmp(
             this.addrs.D2Net.SendPacket,
             (size: number, arg2: number, buffer: NativePointer): number => {
@@ -80,7 +91,7 @@ export class D2Net extends D2Base {
             (buffer: NativePointer, bufferSize: number, payloadSize: NativePointer): number => {
                 const success = D2Net_ValidatePacket(buffer, bufferSize, payloadSize);
 
-                if (success == 0)
+                if (success == 0 || Process.getCurrentThreadId() != this.mainThreadId)
                     return success;
 
                 this.onValidatePacket(buffer, bufferSize, payloadSize);
@@ -443,7 +454,7 @@ export class D2Net extends D2Base {
             {
                 const buf2 = buf.readByteArray(size);
                 if (utils.Logging) {
-                    log(` unknown = ${arg2.hex()}, size = ${size}\n${hexdump(buf2!)}`);
+                    log(` unknown = ${arg2.hex()}, size = ${size}`);
                 }
                 break;
             }
@@ -471,36 +482,36 @@ export class D2Net extends D2Base {
             case D2GSCmd.NPC_INFO:
             case D2GSCmd.RELATOR1:
             case D2GSCmd.RELATOR2:
-            case D2GSCmd.DARKNESS:
-            case D2GSCmd.HPMPUPDATE:
+            // case D2GSCmd.DARKNESS:
+            // case D2GSCmd.HPMPUPDATE:
             case D2GSCmd.REMOVEOBJECT:
-            case D2GSCmd.WORLDOBJECT:
-            case D2GSCmd.MONSTERPACKET:
-            case D2GSCmd.ITEM_WORLD:
-            case D2GSCmd.MULTISTATES:
-            case D2GSCmd.OBJECTSTATE:
-            case D2GSCmd.ITEM_OWNED:
-            case D2GSCmd.UPDATEITEM_OSKILL:
-            case D2GSCmd.UNITCASTSKILL_TARGET:
-            case D2GSCmd.CHAT:
-            case D2GSCmd.EVENTMESSAGES:
-            case D2GSCmd.PLAYERKILLCOUNT:
-            case D2GSCmd.ADDEXP_BYTE:
-            case D2GSCmd.ADDEXP_WORD:
-            case D2GSCmd.ADDEXP_DWORD:
-            case D2GSCmd.SETATTR_BYTE:
-            case D2GSCmd.SETATTR_WORD:
-            case D2GSCmd.SETATTR_DWORD:
-            case D2GSCmd.PLAYERINPROXIMITY:
-            case D2GSCmd.MERCREVIVECOST:
-            case D2GSCmd.GAME_QUESTS_AVAILABILITY:
-            case D2GSCmd.PLAYERQUESTINFO:
-            case D2GSCmd.GAMEQUESTLOG:
-            case D2GSCmd.PORTAL_FLAGS:
-            case D2GSCmd.ASSIGNHOTKEY:
-            case D2GSCmd.CMNCOF:
-            case D2GSCmd.ASSIGNPLAYERTOPARTY:
-            case D2GSCmd.LOADACT:
+            // case D2GSCmd.WORLDOBJECT:
+            // case D2GSCmd.MONSTERPACKET:
+            // case D2GSCmd.ITEM_WORLD:
+            // case D2GSCmd.MULTISTATES:
+            // case D2GSCmd.OBJECTSTATE:
+            // case D2GSCmd.ITEM_OWNED:
+            // case D2GSCmd.UPDATEITEM_OSKILL:
+            // case D2GSCmd.UNITCASTSKILL_TARGET:
+            // case D2GSCmd.CHAT:
+            // case D2GSCmd.EVENTMESSAGES:
+            // case D2GSCmd.PLAYERKILLCOUNT:
+            // case D2GSCmd.ADDEXP_BYTE:
+            // case D2GSCmd.ADDEXP_WORD:
+            // case D2GSCmd.ADDEXP_DWORD:
+            // case D2GSCmd.SETATTR_BYTE:
+            // case D2GSCmd.SETATTR_WORD:
+            // case D2GSCmd.SETATTR_DWORD:
+            // case D2GSCmd.PLAYERINPROXIMITY:
+            // case D2GSCmd.MERCREVIVECOST:
+            // case D2GSCmd.GAME_QUESTS_AVAILABILITY:
+            // case D2GSCmd.PLAYERQUESTINFO:
+            // case D2GSCmd.GAMEQUESTLOG:
+            // case D2GSCmd.PORTAL_FLAGS:
+            // case D2GSCmd.ASSIGNHOTKEY:
+            // case D2GSCmd.CMNCOF:
+            // case D2GSCmd.ASSIGNPLAYERTOPARTY:
+            // case D2GSCmd.LOADACT:
 
             // case D2GSCmd.SETSTATE:
             // case D2GSCmd.DELAYSTATE:
@@ -510,6 +521,17 @@ export class D2Net extends D2Base {
         }
 
         // utils.log(`ValidatePacket: ${D2GSCmd[packetId]}\n${hexdump(payload)}\n`);
+
+        // switch (packetId) {
+        //     case D2GSCmd.ITEM_WORLD:
+        //     {
+        //         const action = buffer.add(1).readU8();
+        //         const catalog = buffer.add(3).readU8();
+        //         const unitId = buffer.add(4).readU32();
+        //         utils.log(`ITEM_WORLD: action = ${action}, catalog = ${catalog}, unitId = ${unitId}`);
+        //         break;
+        //     }
+        // }
     }
 
     flushSendPending() {
@@ -582,8 +604,8 @@ export class D2Net extends D2Base {
     }
 
     onMapReveal(map: D2GSPacket.MapReveal) {
-        const areaID = D2Game.D2Common.getCurrentAreaID();
-        D2Game.D2Client.areaID = areaID;
+        const areaId = D2Game.D2Common.getCurrentAreaID();
+        D2Game.D2Client.areaId = areaId;
     }
 
     onSetSkill(skill: D2GSPacket.SetSkill) {
@@ -622,24 +644,26 @@ export class D2Net extends D2Base {
 }
 
 export class D2Client extends D2Base {
+    mainThreadId    : number    = 0;
     gameLoaded      : boolean   = false;
     gameJoinTime    : number    = 0;
     leftSkill       : number    = 0;
     rightSkill      : number    = 0;
     activeStates    : number[]  = [];
-    areaID          : number    = 0;
+    areaId          : number    = 0;
     playerLocation  : {x: number, y: number} = {x: 0, y: 0};
     queue           : (() => void)[] = [];
+    onMessageLoop   : (() => void)[] = [];
 
     hook() {
-        const mainThreadId = Process.enumerateThreads()[0].id;
+        this.mainThreadId = Process.enumerateThreads()[0].id;
 
         const PeekMessageA = Interceptor2.jmp(
             API.USER32.PeekMessageA,
             (msg: NativePointer, hWnd: NativePointer, msgFilterMin: number, msgFilterMax: number, removeMsg: number): number => {
                 const success = PeekMessageA(msg, hWnd, msgFilterMin, msgFilterMax, removeMsg);
 
-                if (!success && mainThreadId == Process.getCurrentThreadId()) {
+                if (!success && this.mainThreadId == Process.getCurrentThreadId()) {
                     this.messageLoop();
                 }
 
@@ -664,6 +688,16 @@ export class D2Client extends D2Base {
     GetLevelNameFromLevelNo(levelNo: number): string {
         const s = this.addrs.D2Client.GetLevelNameFromLevelNo(levelNo);
         return s.isNull() ? '<None>' : s.readUtf16String()!;
+    }
+
+    FindClientSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit | undefined {
+        const p = this.addrs.D2Client.FindClientSideUnit(unitId, unitType);
+        return p.isNull() ? undefined : new d2types.Unit(p);
+    }
+
+    FindServerSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit | undefined {
+        const p = this.addrs.D2Client.FindServerSideUnit(unitId, unitType);
+        return p.isNull() ? undefined : new d2types.Unit(p);
     }
 
     PrintGameString(msg: string, color: D2StringColor = D2StringColor.Default) {
@@ -751,30 +785,36 @@ export class D2Client extends D2Base {
         this.leftSkill      = 0;
         this.rightSkill     = 0;
         this.activeStates   = [];
-        this.areaID         = 0;
+        this.areaId         = 0;
         this.playerLocation = {x: 0, y: 0};
         this.queue          = [];
     }
 
     scheduleOnMainThread(fn: () => void) {
-        this.queue.push(fn);
+        if (Process.getCurrentThreadId() == this.mainThreadId) {
+            fn();
+        } else {
+            this.queue.push(fn);
+        }
+    }
+
+    addMessageLoopCallback(fn: () => void) {
+        this.onMessageLoop.push(fn);
     }
 
     messageLoop() {
-        // utils.log('messageLoop');
+        for (let cb of this.onMessageLoop) {
+            cb();
+        }
 
         const queue = this.queue.splice(0);
 
         if (queue.length == 0)
             return;
 
-        // utils.log('messageLoop start');
-
         for (let fn of queue) {
             fn();
         }
-
-        // utils.log('messageLoop end');
     }
 }
 
@@ -789,6 +829,10 @@ export class D2Common extends D2Base {
 
     GetItemQuality(item: NativePointer): D2ItemQuality {
         return this.addrs.D2Common.GetItemQuality(item);
+    }
+
+    FindNearestUnitFromPos(unit: NativePointer, x: number, y: number, distance: number, callback: NativeCallback<'uint32', ['pointer', 'pointer']>): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Common.FindNearestUnitFromPos(unit, x, y, distance, callback));
     }
 
     getCurrentAreaID(): D2AreaID {

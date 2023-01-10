@@ -90,6 +90,10 @@ export function getCurrentTime(timestamp? : number): Date {
     return t;
 }
 
+export function getCurrentTimestamp(): number {
+    return getCurrentTime().getTime();
+}
+
 export function log(format: any, ...args: any[]): void {
     if (!Logging)
         return;
@@ -103,7 +107,7 @@ export function log(format: any, ...args: any[]): void {
     // const now = new Date(now1.getTime() + 8 * 3600 * 1000);
     const now = getCurrentTime();
     const time = sprintf('%02d:%02d:%02d.%03d', now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
-    const msg = `${time} ${format}`;
+    const msg = `${time} <${Process.getCurrentThreadId()}> ${format}`;
     console.log(msg);
     send({msg: 'log', data: msg});
 }

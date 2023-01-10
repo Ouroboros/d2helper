@@ -65,7 +65,19 @@ export class ItemsBIN extends NativePointer {
 }
 
 export class Unit extends NativePointer {
-    get TxtFileNo() {
+    get Type(): number {
+        return this.readU32();
+    }
+
+    get TxtFileNo(): number {
         return this.add(4).readU32();
+    }
+
+    get ID(): number {
+        return this.add(0x0C).readU32();
+    }
+
+    get Inventory(): NativePointer {
+        return this.add(0x60).readPointer();
     }
 }
