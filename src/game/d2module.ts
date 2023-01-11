@@ -23,6 +23,7 @@ export interface ID2Addrs {
         FindClientSideUnit      : NativeFunction<NativePointer, [number, number]>;
         FindServerSideUnit      : NativeFunction<NativePointer, [number, number]>;
         CancelTrade             : NativeFunction<number, []>;
+        OnKeyDown               : NativeFunction<void, [NativePointer]>;
 
         // unknown
         sub_486D10              : NativeFunction<number, []>;
@@ -59,7 +60,8 @@ export class D2Base {
 export class D2Net extends D2Base {
     delaySend       : boolean = false;
     sendPending     : ArrayBuffer2[] = [];
-    onRecvCallback  : ((packetId: D2GSCmd, payload: ArrayBuffer2) => void)[] = [];
+    sendCallbacks   : ((packetId: D2ClientCmd, payload: ArrayBuffer2) => void)[] = [];
+    recvCallbacks   : ((packetId: D2GSCmd, payload: ArrayBuffer2) => void)[] = [];
     mainThreadId    : number = 0;
 
     hook() {
@@ -69,14 +71,18 @@ export class D2Net extends D2Base {
             this.addrs.D2Net.SendPacket,
             (size: number, arg2: number, buffer: NativePointer): number => {
                 if (this.delaySend) {
-                    utils.log(`delaySend: ${D2ClientCmd[buffer.readU8()]}`);
+                    const packetId = buffer.readU8();
 
-                    const p = Memory.alloc(size);
+                    if (this.shouldDelaySend(packetId)) {
+                        utils.log(`delaySend: ${D2ClientCmd[packetId]}`);
 
-                    p.writeByteArray(buffer.readByteArray(size)!);
-                    this.sendPending.push(utils.ptrToBytes(p, size));
+                        const p = Memory.alloc(size);
 
-                    return size;
+                        p.writeByteArray(buffer.readByteArray(size)!);
+                        this.sendPending.push(utils.ptrToBytes(p, size));
+
+                        return size;
+                    }
                 }
 
                 this.onSendPacket(size, arg2, buffer);
@@ -102,18 +108,87 @@ export class D2Net extends D2Base {
         );
     }
 
-    addRecvCallback(fn: (packetId: D2GSCmd, payload: ArrayBuffer2) => void) {
-        this.onRecvCallback.push(fn);
+    SendPacket(packet: ArrayBuffer2) {
+        // if (!D2Game.D2Client.gameLoaded)
+        //     return;
+
+        const delaySend = this.delaySend;
+        this.delaySend = false;
+
+        const ret = this.addrs.D2Net.SendPacket(packet.byteLength, 1, packet.ptr);
+
+        this.delaySend = delaySend;
+
+        return ret;
     }
 
-    removeRecvCallback(fn: () => void) {
-        const index = this.onRecvCallback.indexOf(fn);
-        if (index != -1)
-            this.onRecvCallback.splice(index, 1);
+    shouldDelaySend(packetId: D2ClientCmd): boolean {
+        switch (packetId) {
+            case D2ClientCmd.WALKTOLOCATION:
+            case D2ClientCmd.WALKTOENTITY:
+            case D2ClientCmd.RUNTOLOCATION:
+            case D2ClientCmd.RUNTOENTITY:
+            case D2ClientCmd.LEFTSKILLONLOCATION:
+            case D2ClientCmd.LEFTSKILLONENTITY:
+            case D2ClientCmd.LEFTSKILLONENTITYEX:
+            case D2ClientCmd.LEFTSKILLONLOCATIONEX:
+            case D2ClientCmd.LEFTSKILLONENTITYEX2:
+            case D2ClientCmd.LEFTSKILLONENTITYEX3:
+            case D2ClientCmd.RIGHTSKILLONLOCATION:
+            case D2ClientCmd.RIGHTSKILLONENTITY:
+            case D2ClientCmd.RIGHTSKILLONENTITYEX:
+            case D2ClientCmd.RIGHTSKILLONLOCATIONEX:
+            case D2ClientCmd.RIGHTSKILLONENTITYEX2:
+            case D2ClientCmd.RIGHTSKILLONENTITYEX3:
+            case D2ClientCmd.SWAPWEAPON:
+            // case D2ClientCmd.PICKUPITEM:
+            // case D2ClientCmd.DROPITEM:
+            // case D2ClientCmd.ITEMTOBUFFER:
+            // case D2ClientCmd.PICKUPBUFFERITEM:
+            // case D2ClientCmd.ITEMTOBODY:
+            // case D2ClientCmd.SWAP2HANDEDITEM:
+            // case D2ClientCmd.PICKUPBODYITEM:
+            // case D2ClientCmd.SWITCHBODYITEM:
+            // case D2ClientCmd.SWITCH1H_2H:
+            // case D2ClientCmd.SWITCHINVENTORYITEM:
+                return true;
+
+            default:
+                return false;
+        }
     }
+
+    onSend(fn: (packetId: D2ClientCmd, payload: ArrayBuffer2) => void) {
+        this.sendCallbacks.push(fn);
+    }
+
+    onRecv(fn: (packetId: D2GSCmd, payload: ArrayBuffer2) => void) {
+        this.recvCallbacks.push(fn);
+    }
+
+    // removeRecvCallback(fn: () => void) {
+    //     const index = this.recvCallbacks.indexOf(fn);
+    //     if (index != -1)
+    //         this.recvCallbacks.splice(index, 1);
+    // }
 
     private onSendPacket(size: number, arg2: number, buf: NativePointer) {
-        const type = buf.readU8();
+        const packetId: D2ClientCmd = buf.readU8();
+
+        switch (packetId) {
+            case D2ClientCmd.LEAVEGAME:
+                D2Game.D2Client.exitGame();
+                break;
+        }
+
+        if (this.sendCallbacks.length != 0) {
+            const payload = utils.ptrToBytes(buf, size);
+            for (let cb of this.sendCallbacks) {
+                cb(packetId, payload)
+            }
+        }
+
+        return;
 
         function log(s: string) {
             if (!utils.Logging)
@@ -121,12 +196,10 @@ export class D2Net extends D2Base {
 
             const now = utils.getCurrentTime()
             const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
-            console.log(`${time} <${D2ClientCmd[type]}:${type.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
+            console.log(`${time} <${D2ClientCmd[packetId]}:${packetId.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
         }
 
-        return;
-
-        switch (type) {
+        switch (packetId) {
             case D2ClientCmd.RUNTOLOCATION:
             {
                 const x = buf.add(1).readU16();
@@ -461,6 +534,47 @@ export class D2Net extends D2Base {
         }
     }
 
+    onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
+        switch (packetId) {
+            case D2GSCmd.MAPREVEAL:
+                // this.onMapReveal(new D2GSPacket.MapReveal(payload.ptr));
+                break;
+
+            case D2GSCmd.SETSKILL:
+                D2Game.D2Client.onSetSkill(new D2GSPacket.SetSkill(payload.ptr));
+                break;
+
+            case D2GSCmd.SETSTATE:
+            case D2GSCmd.DELAYSTATE:
+                D2Game.D2Client.onSetState(new D2GSPacket.SetState(payload.ptr));
+                break;
+
+            case D2GSCmd.ENDSTATE:
+                D2Game.D2Client.onEndState(new D2GSPacket.EndState(payload.ptr));
+                break;
+
+            case D2GSCmd.WALKVERIFY:
+                D2Game.D2Client.onWalkVerify(new D2GSPacket.WalkVerify(payload.ptr));
+                break;
+
+            case D2GSCmd.REASSIGNPLAYER:
+                D2Game.D2Client.onReassignPlayer(new D2GSPacket.ReassignPlayer(payload.ptr));
+                break;
+
+            case D2GSCmd.LOADSUCCESSFUL:
+                D2Game.D2Client.joinGame();
+                break;
+
+            case D2GSCmd.GAMEEXIT:
+                D2Game.D2Client.exitGame();
+                break;
+        }
+
+        for (let cb of this.recvCallbacks) {
+            cb(packetId, payload);
+        }
+    }
+
     private onValidatePacket(buffer: NativePointer, bufferSize: number, payloadSize: NativePointer) {
         const packetId = buffer.readU8();
         const payload = utils.ptrToBytes(buffer, payloadSize.readU32() ? payloadSize.readU32() : bufferSize);
@@ -534,128 +648,42 @@ export class D2Net extends D2Base {
         // }
     }
 
+    discardSendPending() {
+        D2Game.D2Client.scheduleOnMainThread(() => {
+            this.sendPending.splice(0);
+        });
+    }
+
     flushSendPending() {
-        // utils.log('flushSendPending');
+        D2Game.D2Client.scheduleOnMainThread(() => {
+            this.delaySend = false;
 
-        const sendPending = this.sendPending.splice(0);
+            const sendPending = this.sendPending.splice(0);
 
-        this.delaySend = false;
-
-        for (let p of sendPending) {
-            this.SendPacket(p);
-        }
-
-        // utils.log('flushSendPending end');
-    }
-
-    SendPacket(packet: ArrayBuffer2) {
-        // if (!D2Game.D2Client.gameLoaded)
-        //     return;
-
-        const delaySend = this.delaySend;
-        this.delaySend = false;
-
-        const ret = this.addrs.D2Net.SendPacket(packet.byteLength, 1, packet.ptr);
-
-        this.delaySend = delaySend;
-
-        return ret;
-    }
-
-    onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
-        switch (packetId) {
-            case D2GSCmd.MAPREVEAL:
-                // this.onMapReveal(new D2GSPacket.MapReveal(payload.ptr));
-                break;
-
-            case D2GSCmd.SETSKILL:
-                this.onSetSkill(new D2GSPacket.SetSkill(payload.ptr));
-                break;
-
-            case D2GSCmd.SETSTATE:
-            case D2GSCmd.DELAYSTATE:
-                this.onSetState(new D2GSPacket.SetState(payload.ptr));
-                break;
-
-            case D2GSCmd.ENDSTATE:
-                this.onEndState(new D2GSPacket.EndState(payload.ptr));
-                break;
-
-            case D2GSCmd.WALKVERIFY:
-                this.onWalkVerify(new D2GSPacket.WalkVerify(payload.ptr));
-                break;
-
-            case D2GSCmd.REASSIGNPLAYER:
-                this.onReassignPlayer(new D2GSPacket.ReassignPlayer(payload.ptr));
-                break;
-
-            case D2GSCmd.LOADSUCCESSFUL:
-                D2Game.D2Client.joinGame();
-                break;
-
-            case D2GSCmd.GAMEEXIT:
-                D2Game.D2Client.exitGame();
-                break;
-        }
-
-        for (let cb of this.onRecvCallback) {
-            cb(packetId, payload);
-        }
-    }
-
-    onMapReveal(map: D2GSPacket.MapReveal) {
-        const areaId = D2Game.D2Common.getCurrentAreaID();
-        D2Game.D2Client.areaId = areaId;
-    }
-
-    onSetSkill(skill: D2GSPacket.SetSkill) {
-        if (skill.leftHand) {
-            D2Game.D2Client.leftSkill = skill.skillId;
-        } else {
-            D2Game.D2Client.rightSkill = skill.skillId;
-        }
-    }
-
-    onSetState(state: D2GSPacket.SetState) {
-        switch (state.state) {
-            case D2StateID.SkillCooldown:
-            case D2StateID.Hurricane:
-                utils.log(`set state: ${state.state.hex()}`);
-                D2Game.D2Client.addState(state.state);
-                break;
-        }
-    }
-
-    onEndState(state: D2GSPacket.EndState) {
-        if (D2Game.D2Client.removeState(state.state)) {
-            utils.log(`remove state: ${state.state.hex()}`);
-        }
-    }
-
-    onWalkVerify(walk: D2GSPacket.WalkVerify) {
-        // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
-        D2Game.D2Client.playerLocation = {x: walk.x, y: walk.y};
-    }
-
-    onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
-        // utils.log(`reassign player: ${player.x}, ${player.y}`);
-        D2Game.D2Client.playerLocation = {x: player.x, y: player.y};
+            for (let p of sendPending) {
+                this.SendPacket(p);
+            }
+        });
     }
 }
 
 export class D2Client extends D2Base {
-    mainThreadId    : number    = 0;
-    gameLoaded      : boolean   = false;
-    gameJoinTime    : number    = 0;
-    leftSkill       : number    = 0;
-    rightSkill      : number    = 0;
-    activeStates    : number[]  = [];
-    areaId          : number    = 0;
-    playerLocation  : {x: number, y: number} = {x: 0, y: 0};
-    queue           : (() => void)[] = [];
-    onMessageLoop   : (() => void)[] = [];
+    gameLoaded          : boolean   = false;
+    gameJoinTime        : number    = 0;
+    leftSkill           : number    = 0;
+    rightSkill          : number    = 0;
+    activeStates        : number[]  = [];
+    areaId              : number    = 0;
+    playerLocation      : {x: number, y: number} = {x: 0, y: 0};
+
+    mainThreadId        : number    = 0;
+    mainThreadCallbacks : (() => void)[] = [];
+    idleLoopCallbacks   : (() => void)[] = [];
+    keyDownCallbacks    : ((vk: number) => void)[] = [];
 
     hook() {
+        let d2wnd: NativePointer;
+
         this.mainThreadId = Process.enumerateThreads()[0].id;
 
         const PeekMessageA = Interceptor2.jmp(
@@ -663,13 +691,54 @@ export class D2Client extends D2Base {
             (msg: NativePointer, hWnd: NativePointer, msgFilterMin: number, msgFilterMax: number, removeMsg: number): number => {
                 const success = PeekMessageA(msg, hWnd, msgFilterMin, msgFilterMax, removeMsg);
 
-                if (!success && this.mainThreadId == Process.getCurrentThreadId()) {
-                    this.messageLoop();
+                // if (success) {
+                //     hWnd = msg.readPointer();
+
+                //     if (d2wnd === undefined) {
+                //         const MAX_CLASS_NAME = 1024;
+                //         const buf = Memory.alloc(MAX_CLASS_NAME);
+
+                //         if (API.USER32.GetClassNameW(hWnd, buf, MAX_CLASS_NAME) == 0)
+                //             return success;
+
+                //         if (buf.readUtf16String() != 'Diablo II')
+                //             return success;
+
+                //         d2wnd = hWnd;
+                //     }
+                // }
+
+                if (success) {
+                    // if ((d2wnd && !d2wnd.equals(hWnd)) || hWnd.isNull())
+                    //     return success;
+
+                    // do {
+                    //     if (d2wnd === undefined)
+                    //         break;
+
+                    //     if (!d2wnd.equals(hWnd))
+                    //         break;
+
+                    //     this.messageLoop(msg);
+
+                    // } while (0);
+
+                } else if (Process.getCurrentThreadId() == this.mainThreadId) {
+                    this.idleLoop();
                 }
 
                 return success;
             },
             'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
+        );
+
+        const OnKeyDown = Interceptor2.jmp(
+            this.addrs.D2Client.OnKeyDown,
+            (msg: NativePointer) => {
+                OnKeyDown(msg);
+                this.messageLoop(msg);
+            },
+            'void', ['pointer'], 'stdcall',
         );
     }
 
@@ -774,46 +843,117 @@ export class D2Client extends D2Base {
     }
 
     joinGame() {
-        this.queue = [];
+        this.mainThreadCallbacks = [];
         this.gameLoaded = true;
         this.gameJoinTime = utils.getCurrentTime().getTime();
     }
 
     exitGame() {
-        this.gameLoaded     = false;
-        this.gameJoinTime   = 0;
-        this.leftSkill      = 0;
-        this.rightSkill     = 0;
-        this.activeStates   = [];
-        this.areaId         = 0;
-        this.playerLocation = {x: 0, y: 0};
-        this.queue          = [];
+        this.gameLoaded             = false;
+        this.gameJoinTime           = 0;
+        this.leftSkill              = 0;
+        this.rightSkill             = 0;
+        this.activeStates           = [];
+        this.areaId                 = 0;
+        this.playerLocation         = {x: 0, y: 0};
+        this.mainThreadCallbacks    = [];
+    }
+
+    onMapReveal(map: D2GSPacket.MapReveal) {
+        const areaId = D2Game.D2Common.getCurrentAreaID();
+        this.areaId = areaId;
+    }
+
+    onSetSkill(skill: D2GSPacket.SetSkill) {
+        if (skill.leftHand) {
+            this.leftSkill = skill.skillId;
+        } else {
+            this.rightSkill = skill.skillId;
+        }
+    }
+
+    onSetState(state: D2GSPacket.SetState) {
+        switch (state.state) {
+            case D2StateID.SkillCooldown:
+            case D2StateID.Hurricane:
+                utils.log(`set state: ${state.state.hex()}`);
+                this.addState(state.state);
+                break;
+        }
+    }
+
+    onEndState(state: D2GSPacket.EndState) {
+        if (this.removeState(state.state)) {
+            utils.log(`remove state: ${state.state.hex()}`);
+        }
+    }
+
+    onWalkVerify(walk: D2GSPacket.WalkVerify) {
+        // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
+        this.playerLocation = {x: walk.x, y: walk.y};
+    }
+
+    onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
+        // utils.log(`reassign player: ${player.x}, ${player.y}`);
+        this.playerLocation = {x: player.x, y: player.y};
+    }
+
+    showKeyAction(name: string, state: boolean) {
+        this.PrintPartyString(`${name} Toggle -> ${state ? 'OFF' : 'ON'}`, D2StringColor.Orange);
+        this.PrintPartyString('Key Action:', D2StringColor.Purple)
     }
 
     scheduleOnMainThread(fn: () => void) {
         if (Process.getCurrentThreadId() == this.mainThreadId) {
             fn();
         } else {
-            this.queue.push(fn);
+            this.mainThreadCallbacks.push(fn);
         }
     }
 
-    addMessageLoopCallback(fn: () => void) {
-        this.onMessageLoop.push(fn);
+    onIdleLoop(fn: () => void) {
+        this.idleLoopCallbacks.push(fn);
     }
 
-    messageLoop() {
-        for (let cb of this.onMessageLoop) {
+    onKeyDown(fn: (vk: number) => void) {
+        this.keyDownCallbacks.push(fn);
+    }
+
+    idleLoop() {
+        for (let cb of this.idleLoopCallbacks) {
             cb();
         }
 
-        const queue = this.queue.splice(0);
+        const queue = this.mainThreadCallbacks.splice(0);
 
         if (queue.length == 0)
             return;
 
         for (let fn of queue) {
             fn();
+        }
+    }
+
+    messageLoop(msg: NativePointer) {
+        const message = msg.add(4).readU32();
+
+        // utils.log(`msg: ${message.hex()}`);
+
+        switch (message) {
+            case 0x100:    // WM_KEYDOWN
+            {
+                const vk = msg.add(8).readU32();
+                const previousKeyState = msg.add(0xC).readU32() & 0x40000000;
+
+                if (previousKeyState == 0) {
+                    for (let cb of this.keyDownCallbacks)
+                        cb(vk);
+                }
+
+                // utils.log(`vk = ${vk}, re = ${previousKeyState.hex()}`);
+
+                break;
+            }
         }
     }
 }

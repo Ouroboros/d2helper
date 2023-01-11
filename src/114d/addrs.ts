@@ -18,6 +18,7 @@ export const Addrs = {
         FindClientSideUnit      : new NativeFunction(Modules.Game.base.add(0x63990), 'pointer', ['uint32', 'uint32'], 'fastcall'),
         FindServerSideUnit      : new NativeFunction(Modules.Game.base.add(0x639B0), 'pointer', ['uint32', 'uint32'], 'fastcall'),
         CancelTrade             : new NativeFunction(Modules.Game.base.add(0x0B90B0), 'uint32', []),
+        OnKeyDown               : new NativeFunction(Modules.Game.base.add(0x06A840), 'void', ['pointer']),
 
         // unknown
         sub_486D10              : new NativeFunction(Modules.Game.base.add(0x086D10), 'uint32', []),

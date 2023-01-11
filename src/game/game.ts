@@ -1,12 +1,13 @@
 import * as utils from '../utils';
 import * as d2types from './d2types';
-import { API } from '../modules';
+import { API, Modules } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2AreaID, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
+import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2AreaID, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
 import { ID2Addrs, D2Net, D2Client, D2Common, D2Lang } from './d2module';
 
 class HurricaneMonitor {
     _active         : boolean   = false;
+    _disabled       : boolean   = false;
     duration        : number    = 0;
     startTime       : number    = 0;
     nextCastTime    : number    = 0;
@@ -21,13 +22,31 @@ class HurricaneMonitor {
     }
 
     set active(active: boolean) {
-        // utils.log(`setActive: ${active}`);
         this._active = active;
     }
 
-    printPartyString(msg: string) {
+    get disabled(): boolean {
+        return this._disabled;
+    }
+
+    set disabled(disabled: boolean) {
+        this._disabled = disabled;
+    }
+
+    printPartyString(msg: string, color: D2StringColor = D2StringColor.Grey) {
         utils.log(msg);
-        D2Game.D2Client.PrintPartyString(msg, D2StringColor.Grey);
+        D2Game.D2Client.PrintPartyString(msg, color);
+    }
+
+    onSendPacket(packetId: D2ClientCmd, payload: ArrayBuffer2) {
+        switch (packetId) {
+            case D2ClientCmd.LEAVEGAME:
+                this.active = false;
+                this.startTime = 0;
+                this.duration = 0;
+                D2Game.D2Net.discardSendPending();
+                break;
+        }
     }
 
     onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
@@ -39,12 +58,15 @@ class HurricaneMonitor {
             case D2AreaID.PandemoniumFortress:
             case D2AreaID.Harrogath:
                 this.active = false;
-                return;
+                break;
 
             default:
                 this.active = true;
                 break;
         }
+
+        if (this.disabled && packetId != D2GSCmd.GAMEEXIT)
+            return;
 
         switch (packetId) {
             case D2GSCmd.MAPREVEAL:
@@ -56,7 +78,6 @@ class HurricaneMonitor {
 
                 if (state.state == D2StateID.Hurricane) {
                     this.active = true;
-                    // this.startTime = (new Date).getTime();
                     this.startTime = utils.getCurrentTime().getTime();
                 }
 
@@ -93,6 +114,7 @@ class HurricaneMonitor {
                 this.active = false;
                 this.startTime = 0;
                 this.duration = 0;
+                D2Game.D2Net.discardSendPending();
                 break;
         }
     }
@@ -103,11 +125,12 @@ class HurricaneMonitor {
     }
 
     setupCastHurricaneTimer() {
-        let maxRetry                  = 0;
-        let nextRetryTime             = 0;
-        let autoCastTime              = 0;
-        let autoCastTimeRetry         = 0;
-        let currentAction             = HurricaneMonitor.Action.Idle;
+        let maxRetry            = 0;
+        let nextRetryTime       = 0;
+        let autoCastTime        = 0;
+        let autoCastRetry   = 0;
+        let currentAction       = HurricaneMonitor.Action.Idle;
+        let previousDisabled    = false;
         let timerId: NodeJS.Timer | undefined;
 
         const RetryInterval           = 500;
@@ -121,14 +144,14 @@ class HurricaneMonitor {
 
         const setAutoCastTime = (now: number, reset: boolean = false) => {
             if (reset)
-                autoCastTimeRetry = 0;
+                autoCastRetry = 0;
 
-            if (autoCastTimeRetry == 0) {
+            if (autoCastRetry == 0) {
                 autoCastTime = now + (this.duration - 5) * 1000;
-                autoCastTimeRetry = MaxAutoCastRetryTimes;
+                autoCastRetry = MaxAutoCastRetryTimes;
 
             } else {
-                autoCastTimeRetry--;
+                autoCastRetry--;
                 autoCastTime = now + 200;
             }
 
@@ -136,8 +159,33 @@ class HurricaneMonitor {
             utils.log(`nextCastTime<${timerId}>: ${t.getHours().pad(2)}:${t.getMinutes().pad(2)}:${t.getSeconds().pad(2)}.${t.getMilliseconds().pad(3)}`);
         }
 
+        const reset = () => {
+            maxRetry        = 0;
+            nextRetryTime   = 0;
+            autoCastTime    = 0;
+            autoCastRetry   = 0;
+
+            D2Game.D2Net.flushSendPending();
+        };
+
+        D2Game.D2Client.onKeyDown((vk: number) => {
+            switch (vk) {
+                case 0xDC:  // VK_OEM_5     \
+                    this.disabled = !this.disabled;
+                    if (this.disabled)
+                        reset();
+
+                    D2Game.D2Client.showKeyAction('Auto Hurricane', this.disabled);
+                    break;
+            }
+        });
+
         timerId = setInterval(() => {
             const now = utils.getCurrentTime().getTime();
+
+            if (this.disabled) {
+                return;
+            }
 
             switch (currentAction) {
                 case HurricaneMonitor.Action.Idle:
@@ -146,7 +194,8 @@ class HurricaneMonitor {
                     nextRetryTime = 0;
 
                     if (!this.active) {
-                        autoCastTimeRetry = 0;
+                        // reset();
+                        autoCastRetry = 0;
                         autoCastTime = 0;
                         return;
                     }
@@ -157,7 +206,7 @@ class HurricaneMonitor {
                         // const t = new Date(autoCastTime);
                         const t = utils.getCurrentTime(autoCastTime);
                         this.printPartyString(`nextCastTime<${timerId}>: ${t.getHours().pad(2)}:${t.getMinutes().pad(2)}:${t.getSeconds().pad(2)}.${t.getMilliseconds().pad(3)}`);
-                        this.printPartyString('auto Hurricane');
+                        this.printPartyString(`auto Hurricane<${autoCastRetry}>`);
 
                         D2Game.D2Client.scheduleOnMainThread(() => {
                             this.castHurricane();
@@ -172,9 +221,7 @@ class HurricaneMonitor {
                 case HurricaneMonitor.Action.EndState:
                 {
                     if (!this.active || maxRetry == 0 || D2Game.D2Client.hasState(D2StateID.Hurricane)) {
-                        D2Game.D2Client.scheduleOnMainThread(() => {
-                            D2Game.D2Net.flushSendPending();
-                        });
+                        D2Game.D2Net.flushSendPending();
 
                         maxRetry = 0;
 
@@ -323,24 +370,54 @@ export class D2Game {
     }
 
     init(addrs: ID2Addrs) {
+        const d2DuckLoaded = Process.findModuleByName('D2Duck.dll') != null;
         const D2Duck = Module.load('D2Duck.dll');
 
-        this.addrs      = addrs;
+        this.addrs = addrs;
+
+        // this.init2(addrs);
+        this.hookD2Duck(D2Duck);
+
+        if (d2DuckLoaded) {
+            this.init2(addrs);
+
+        } else {
+            this.delayInit(addrs);
+        }
+    }
+
+    delayInit(addrs: ID2Addrs) {
+        const AddAccessDeniedAce = Interceptor2.jmp(
+            API.ADVAPI32.AddAccessDeniedAce,
+            (acl: NativePointer, aceRevision: number, accessMask: number, sid: NativePointer): number => {
+                if (accessMask == 0xF01FFFFE)
+                    this.init2(addrs);
+
+                return AddAccessDeniedAce(acl, aceRevision, accessMask, sid);
+            },
+            'int32', ['pointer', 'uint32', 'uint32', 'pointer'], 'stdcall',
+        );
+    }
+
+    init2(addrs: ID2Addrs) {
         this._D2Net     = new D2Net(addrs);
         this._D2Client  = new D2Client(addrs);
         this._D2Common  = new D2Common(addrs);
         this._D2Lang    = new D2Lang(addrs);
 
-        this.hook(D2Duck);
+        this.hook();
 
         this.monitor = new HurricaneMonitor();
-        this._D2Net.addRecvCallback(this.monitor.onReceivePacket.bind(this.monitor));
+        this.D2Net.onRecv(this.monitor.onReceivePacket.bind(this.monitor));
+        this.D2Net.onSend(this.monitor.onSendPacket.bind(this.monitor));
     }
 
-    hook(d2duck: Module) {
+    hook() {
         this._D2Net?.hook();
         this._D2Client?.hook();
+    }
 
+    hookD2Duck(d2duck: Module) {
         const fopen = Interceptor2.jmp(
             API.crt.fopen,
             (path: NativePointer, mode: NativePointer): NativePointer => {
@@ -387,10 +464,6 @@ export class D2Game {
             'int32', ['pointer', 'pointer', 'pointer'], 'stdcall',
         );
 
-        this.hookD2Duck(d2duck);
-    }
-
-    hookD2Duck(d2duck: Module) {
         const duck = function(): ID2Duck | undefined {
             const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
             switch (timestamp) {
@@ -510,7 +583,7 @@ export class D2Game {
             'void', ['pointer'], 'mscdecl',
         );
 
-        this.D2Net.addRecvCallback((packetId: D2GSCmd, payload: utils.ArrayBuffer2) => {
+        this.D2Net.onRecv((packetId: D2GSCmd, payload: utils.ArrayBuffer2) => {
             switch (packetId) {
                 case D2GSCmd.ITEM_WORLD:
                     {

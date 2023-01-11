@@ -43,10 +43,12 @@ export const API = {
         // GetSystemMetrics                : new NativeFunction(Modules.USER32.getExportByName('GetSystemMetrics'), 'int32', ['int32'], 'stdcall'),
         // SystemParametersInfoW           : new NativeFunction(Modules.USER32.getExportByName('SystemParametersInfoW'), 'uint32', ['uint32', 'uint32', 'pointer', 'uint32'], 'stdcall'),
         // SetWindowPos                    : new NativeFunction(Modules.USER32.getExportByName('SetWindowPos'), 'uint32', ['pointer', 'pointer', 'int32', 'int32', 'int32', 'int32', 'uint32'], 'stdcall'),
-        PeekMessageA                    : new NativeFunction(Modules.USER32.getExportByName('PeekMessageA'), 'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32']),
+        PeekMessageA                : new NativeFunction(Modules.USER32.getExportByName('PeekMessageA'), 'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32']),
+        GetClassNameW               : new NativeFunction(Modules.USER32.getExportByName('GetClassNameW'), 'int32', ['pointer', 'pointer', 'int32']),
     },
 
     ADVAPI32: {
-        CheckTokenMembership            : new NativeFunction(Modules.ADVAPI32.getExportByName('CheckTokenMembership'), 'int32', ['pointer', 'pointer', 'pointer'], 'stdcall'),
+        CheckTokenMembership        : new NativeFunction(Modules.ADVAPI32.getExportByName('CheckTokenMembership'), 'int32', ['pointer', 'pointer', 'pointer'], 'stdcall'),
+        AddAccessDeniedAce          : new NativeFunction(Modules.ADVAPI32.getExportByName('AddAccessDeniedAce'), 'int32', ['pointer', 'uint32', 'uint32', 'pointer'], 'stdcall'),
     },
 };
