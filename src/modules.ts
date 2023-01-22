@@ -3,6 +3,7 @@ import * as path from "path";
 const modules = Process.enumerateModules();
 
 export const Modules = {
+    ntdll       : Module.load('ntdll.dll'),
     KERNEL32    : Module.load('KERNEL32.dll'),
     USER32      : Module.load('USER32.dll'),
     ADVAPI32    : Module.load('ADVAPI32.dll'),
@@ -28,8 +29,13 @@ export const API = {
     },
 
     WIN32: {
+        SE_SHUTDOWN_PRIVILEGE       : 19,
+
+        RtlAdjustPrivilege          : new NativeFunction(Modules.ntdll.getExportByName('RtlAdjustPrivilege'), 'uint32', ['uint32', 'uint32', 'uint32', 'pointer'], 'stdcall'),
+        SetSystemPowerState         : new NativeFunction(Modules.KERNEL32.getExportByName('SetSystemPowerState'), 'uint32', ['uint32', 'uint32'], 'stdcall'),
         LoadLibraryW                : new NativeFunction(Modules.KERNEL32.getExportByName('LoadLibraryW'), 'pointer', ['pointer'], 'stdcall'),
         CreateFileW                 : new NativeFunction(Modules.KERNEL32.getExportByName('CreateFileW'), 'pointer', ['pointer', 'uint32', 'uint32', 'pointer', 'uint32', 'uint32', 'pointer'], 'stdcall'),
+        CreateDirectoryW            : new NativeFunction(Modules.KERNEL32.getExportByName('CreateDirectoryW'), 'uint32', ['pointer', 'pointer'], 'stdcall'),
         GetFileAttributesA          : new NativeFunction(Modules.KERNEL32.getExportByName('GetFileAttributesA'), 'uint32', ['pointer'], 'stdcall'),
         Sleep                       : new NativeFunction(Modules.KERNEL32.getExportByName('Sleep'), 'void', ['uint32'], 'stdcall'),
         MultiByteToWideChar         : new NativeFunction(Modules.KERNEL32.getExportByName('MultiByteToWideChar'), 'int32', ['uint32', 'uint32', 'pointer', 'int32', 'pointer', 'int32'], 'stdcall'),
@@ -43,7 +49,12 @@ export const API = {
         // GetSystemMetrics                : new NativeFunction(Modules.USER32.getExportByName('GetSystemMetrics'), 'int32', ['int32'], 'stdcall'),
         // SystemParametersInfoW           : new NativeFunction(Modules.USER32.getExportByName('SystemParametersInfoW'), 'uint32', ['uint32', 'uint32', 'pointer', 'uint32'], 'stdcall'),
         // SetWindowPos                    : new NativeFunction(Modules.USER32.getExportByName('SetWindowPos'), 'uint32', ['pointer', 'pointer', 'int32', 'int32', 'int32', 'int32', 'uint32'], 'stdcall'),
-        PeekMessageA                : new NativeFunction(Modules.USER32.getExportByName('PeekMessageA'), 'int32', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32']),
+        GetClassInfoA               : new NativeFunction(Modules.USER32.getExportByName('GetClassInfoA'), 'uint32', ['pointer', 'pointer', 'pointer'], 'stdcall'),
+        GetClassInfoW               : new NativeFunction(Modules.USER32.getExportByName('GetClassInfoW'), 'uint32', ['pointer', 'pointer', 'pointer'], 'stdcall'),
+        GetWindowLongA              : new NativeFunction(Modules.USER32.getExportByName('GetWindowLongA'), 'pointer', ['pointer', 'int32'], 'stdcall'),
+        GetWindowLongW              : new NativeFunction(Modules.USER32.getExportByName('GetWindowLongW'), 'pointer', ['pointer', 'int32'], 'stdcall'),
+        SendMessageA                : new NativeFunction(Modules.USER32.getExportByName('SendMessageA'), 'pointer', ['pointer', 'size_t', 'size_t', 'size_t'], 'stdcall'),
+        PeekMessageA                : new NativeFunction(Modules.USER32.getExportByName('PeekMessageA'), 'int32', ['pointer', 'pointer', 'size_t', 'size_t', 'uint32']),
         GetClassNameW               : new NativeFunction(Modules.USER32.getExportByName('GetClassNameW'), 'int32', ['pointer', 'pointer', 'int32']),
     },
 

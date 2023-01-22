@@ -226,9 +226,24 @@ export enum D2GSCmd {
     CONNECTIONREFUSED           = 0xB4,
 }
 
+export enum D2ClientState {
+    None                        = 0,
+    CreatingGame                = 1,
+    InGame                      = 2,
+    JoinGame                    = 3,
+}
+
 export enum D2SkillID {
     None                        = 0,
-    Hurricane                   = 250,      // dru-暴风
+    Sor_Teleport                = 54,       // TP
+    Sor_ThunderStorm            = 57,       // 雷云风暴
+    Dru_Werewolf                = 223,      // dru-变狼
+    Dru_OakSage                 = 226,      // dru-橡木智者
+    Dru_Hurricane               = 250,      // dru-暴风
+    UnskilledTeleport           = 581,      // 闪现
+    CreateCowPortal             = 582,      // 开牛门
+    Dru_Boost                   = 615,      // dru-爆气
+    Dru_Teleport                = 654,      // dru-突袭
 }
 
 export enum D2StateID {
@@ -236,7 +251,7 @@ export enum D2StateID {
     Hurricane                   = 0x90,     // dru-暴风
 }
 
-export enum D2AreaID {
+export enum D2LevelNo {
     None                        = 0x00,
     RogueEncampment             = 0x01,     // 罗格营地
     LutGholein                  = 0x28,     // 鲁高因
@@ -246,8 +261,50 @@ export enum D2AreaID {
     Cow1                        = 0x89,     // 牛一
 }
 
+export enum D2UnitType {
+    Player                      = 0,
+    Monster                     = 1,
+    Object                      = 2,
+    Missile                     = 3,
+    Item                        = 4,
+    Tile                        = 5,
+}
+
+export enum D2ItemType {
+    Gold                        = 4,
+}
+
+export enum D2UnitItemMode {
+    InvOrCube                   = 0,
+    Equipped                    = 1,
+    InBelt                      = 2,
+    OnGround                    = 3,
+    OnCursor                    = 4,
+    BeingDropped                = 5,
+    SocketedInItem              = 6,
+}
+
+export enum D2ItemFlags {
+    NewItem                     = 0x00000001,
+    Magical                     = 0x00000010,
+    Socketed                    = 0x00000800,
+    Ear                         = 0x00001000,
+    Newitem2                    = 0x00002000,
+    CheckSecPrice               = 0x00010000,
+    ChackGamblePrice            = 0x00020000,
+    Etheral                     = 0x00400000,
+    FromPlayer                  = 0x01000000,
+}
+
+export enum D2ItemLocation {
+    Inventory                   = 0,
+    Cube                        = 3,
+    Store                       = 4,
+    Equipped                    = 0xFF,
+}
+
 export enum D2ItemQuality {
-    Crude                       = 1,        // 粗糙的
+    Cracked                     = 1,        // 粗糙的
     Normal                      = 2,        // 普通的
     Superior                    = 3,        // 超强的
     Magic                       = 4,        // 魔法的
@@ -255,6 +312,7 @@ export enum D2ItemQuality {
     Rare                        = 6,        // 精华的
     Unique                      = 7,        // 暗金的
     Crafted                     = 8,        // 手工的
+    Tempered                    = 9,        // 暗绿的
 }
 
 export enum D2ItemQualityCN {
@@ -285,13 +343,23 @@ export enum D2StringColor {
     DarkGreen                   = 12,
 }
 
-export enum D2UnitType {
-    Player                      = 0,
-    Monster                     = 1,
-    Object                      = 2,
-    Missile                     = 3,
-    Item                        = 4,
-    Tile                        = 5,
+export enum D2CharClass {
+    AMA                         = 0,
+    SOR                         = 1,
+    NEC                         = 2,
+    PAL                         = 3,
+    BAR                         = 4,
+    DRU                         = 5,
+    ASN                         = 6,
+}
+
+export enum D2StatID {
+    HP                          = 6,
+    MaxHP                       = 7,
+    Mana                        = 8,
+    MaxMana                     = 9,
+    Durability                  = 72,
+    MaxDurability               = 73,
 }
 
 export namespace D2GSPacket {
@@ -306,14 +374,14 @@ export namespace D2GSPacket {
     export class MapReveal extends Base {
         tileX           : number;
         tileY           : number;
-        areaId          : number;
+        levelNo         : number;
 
         constructor(ptr: NativePointer) {
             super(ptr);
 
-            this.tileX  = ptr.add(0x01).readU8();
-            this.tileY  = ptr.add(0x03).readU32();
-            this.areaId = ptr.add(0x05).readU8();
+            this.tileX      = ptr.add(0x01).readU8();
+            this.tileY      = ptr.add(0x03).readU32();
+            this.levelNo    = ptr.add(0x05).readU8();
         }
     }
 

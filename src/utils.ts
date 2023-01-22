@@ -7,6 +7,7 @@ declare global {
     interface Number {
         pad(base: number): string;
         hex(): string;
+        hexToString(): string;
     }
 }
 
@@ -29,6 +30,11 @@ Number.prototype.hex = function () {
         prefix = '0';
 
     return '0x' + prefix + this.toString(16);
+};
+
+Number.prototype.hexToString = function () {
+    const n = Number(this);
+    return String.fromCharCode(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF);
 };
 
 export class Interceptor2 {

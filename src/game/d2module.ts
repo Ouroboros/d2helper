@@ -1,8 +1,8 @@
 import * as utils from '../utils';
 import * as d2types from './d2types';
-import { API } from '../modules';
+import { API, Modules } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2AreaID, D2ItemQuality, D2StringColor, D2UnitType } from './types';
+import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types';
 import { D2Game } from './game';
 
 export interface ID2Addrs {
@@ -15,6 +15,9 @@ export interface ID2Addrs {
         MouseX                  : NativePointer;
         MouseY                  : NativePointer;
         GameInfo                : NativePointer;
+        ClientState             : NativePointer;
+
+        LeaveGame               : NativeFunction<void, [number, NativePointer]>;
 
         GetPlayerUnit           : NativeFunction<NativePointer, []>;
         PrintGameString         : NativeFunction<void, [NativePointer, number]>;
@@ -24,6 +27,7 @@ export interface ID2Addrs {
         FindServerSideUnit      : NativeFunction<NativePointer, [number, number]>;
         CancelTrade             : NativeFunction<number, []>;
         OnKeyDown               : NativeFunction<void, [NativePointer]>;
+        GetUnitName             : NativeFunction<NativePointer, [NativePointer]>;
 
         // unknown
         sub_486D10              : NativeFunction<number, []>;
@@ -33,15 +37,42 @@ export interface ID2Addrs {
     D2Common: {
         ItemTable               : NativePointer;
 
+        FindNearestUnitFromPos  : NativeFunction<NativePointer, [NativePointer, number, number, number, NativePointer]>;
         GetRoomFromUnit         : NativeFunction<NativePointer, [NativePointer]>;
         GetLevelNoFromRoom      : NativeFunction<number, [NativePointer]>;
+
+        CheckItemType           : NativeFunction<number, [NativePointer, number]>;
         GetItemsBIN             : NativeFunction<NativePointer, [number]>;
         GetItemQuality          : NativeFunction<number, [NativePointer]>;
-        FindNearestUnitFromPos  : NativeFunction<NativePointer, [NativePointer, number, number, number, NativePointer]>;
+        GetUnitPosition         : NativeFunction<void, [NativePointer, NativePointer]>;
+        GetUnitDistanceToPos    : NativeFunction<number, [NativePointer, number, number]>;
+        GetUnitStat             : NativeFunction<number, [NativePointer, number, number]>;
+        GetUnitStatByFlags      : NativeFunction<NativePointer, [NativePointer, number]>;
+        GetCursorItem           : NativeFunction<NativePointer, [NativePointer]>;
+        GetUnitDistance         : NativeFunction<number, [NativePointer, number, number]>;
+        GetItemCode             : NativeFunction<number, [NativePointer]>;
+
+        Inventory: {
+            GetItemLocation     : NativeFunction<number, [NativePointer]>;
+            GetFirstItem        : NativeFunction<NativePointer, [NativePointer]>;
+            GetNextItem         : NativeFunction<NativePointer, [NativePointer]>;
+        },
+    }
+
+    D2Multi: {
+        BNCreateGameTabOnClick  : NativeFunction<number, [NativePointer]>;
+        BNCreateGameBtnOnClick  : NativeFunction<number, [NativePointer]>;
+
+        CreateGameTabControl    : NativePointer;
+        WaitForBNReadyStartTime : NativePointer;
     }
 
     D2Lang: {
         GetStringFromIndex      : NativeFunction<NativePointer, [number]>;
+    }
+
+    Storm: {
+        LoadFile                : NativeFunction<number, [NativePointer, NativePointer, number, NativePointer, number, number, number]>;
     }
 }
 
@@ -668,13 +699,15 @@ export class D2Net extends D2Base {
 }
 
 export class D2Client extends D2Base {
-    gameLoaded          : boolean   = false;
-    gameJoinTime        : number    = 0;
-    leftSkill           : number    = 0;
-    rightSkill          : number    = 0;
-    activeStates        : number[]  = [];
-    areaId              : number    = 0;
-    playerLocation      : {x: number, y: number} = {x: 0, y: 0};
+    gameLoaded          : boolean                   = false;
+    gameJoinTime        : number                    = 0;
+    leftSkill           : number                    = 0;
+    rightSkill          : number                    = 0;
+    activeStates        : number[]                  = [];
+    levelNo             : number                    = 0;
+    playerLocation      : d2types.Position          = d2types.Position.default();
+    gameWindow          : NativePointer             = NULL;
+    gameWindowProc      : NativeFunction<NativePointer, [NativePointer, number, NativePointer, NativePointer]> = new NativeFunction(NULL, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer']);
 
     mainThreadId        : number    = 0;
     mainThreadCallbacks : (() => void)[] = [];
@@ -682,8 +715,6 @@ export class D2Client extends D2Base {
     keyDownCallbacks    : ((vk: number) => void)[] = [];
 
     hook() {
-        let d2wnd: NativePointer;
-
         this.mainThreadId = Process.enumerateThreads()[0].id;
 
         const PeekMessageA = Interceptor2.jmp(
@@ -691,22 +722,30 @@ export class D2Client extends D2Base {
             (msg: NativePointer, hWnd: NativePointer, msgFilterMin: number, msgFilterMax: number, removeMsg: number): number => {
                 const success = PeekMessageA(msg, hWnd, msgFilterMin, msgFilterMax, removeMsg);
 
-                // if (success) {
-                //     hWnd = msg.readPointer();
+                if (success && this.gameWindow.isNull()) {
+                    hWnd = msg.readPointer();
 
-                //     if (d2wnd === undefined) {
-                //         const MAX_CLASS_NAME = 1024;
-                //         const buf = Memory.alloc(MAX_CLASS_NAME);
+                    const MAX_CLASS_NAME = 1024;
+                    const buf = Memory.alloc(MAX_CLASS_NAME);
 
-                //         if (API.USER32.GetClassNameW(hWnd, buf, MAX_CLASS_NAME) == 0)
-                //             return success;
+                    if (API.USER32.GetClassNameW(hWnd, buf, MAX_CLASS_NAME) == 0)
+                        return success;
 
-                //         if (buf.readUtf16String() != 'Diablo II')
-                //             return success;
+                    if (buf.readUtf16String() != 'Diablo II')
+                        return success;
 
-                //         d2wnd = hWnd;
-                //     }
-                // }
+                    this.gameWindow = hWnd;
+
+                    const wndclassA = Memory.alloc(0x28);
+                    const ok = API.USER32.GetClassInfoA(Modules.Game.base, utils.UTF8('Diablo II'), wndclassA);
+                    const wndproc = wndclassA.add(4).readPointer();
+
+                    if (wndproc.isNull()) {
+                        utils.log('wndproc is null, wtf?');
+                    } else {
+                        this.gameWindowProc = new NativeFunction(wndproc, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer'], 'stdcall')
+                    }
+                }
 
                 if (success) {
                     // if ((d2wnd && !d2wnd.equals(hWnd)) || hWnd.isNull())
@@ -754,19 +793,42 @@ export class D2Client extends D2Base {
         return p.isNull() ? undefined : new d2types.GameInfo(p);
     }
 
+    get ClientState(): D2ClientState {
+        return this.addrs.D2Client.ClientState.readU32();
+    }
+
+    LeaveGame() {
+        if (this.gameWindow.isNull())
+            return;
+
+        const p = Memory.alloc(Process.pointerSize);
+        p.writePointer(this.gameWindow);
+        this.addrs.D2Client.LeaveGame(0, p);
+    }
+
     GetLevelNameFromLevelNo(levelNo: number): string {
         const s = this.addrs.D2Client.GetLevelNameFromLevelNo(levelNo);
         return s.isNull() ? '<None>' : s.readUtf16String()!;
     }
 
-    FindClientSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit | undefined {
-        const p = this.addrs.D2Client.FindClientSideUnit(unitId, unitType);
-        return p.isNull() ? undefined : new d2types.Unit(p);
+    FindClientSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Client.FindClientSideUnit(unitId, unitType));
     }
 
-    FindServerSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit | undefined {
-        const p = this.addrs.D2Client.FindServerSideUnit(unitId, unitType);
-        return p.isNull() ? undefined : new d2types.Unit(p);
+    FindServerSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Client.FindServerSideUnit(unitId, unitType));
+    }
+
+    GetPlayerUnit(): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Client.GetPlayerUnit());
+    }
+
+    GetUnitName(unit: NativePointer): string {
+        const name = this.addrs.D2Client.GetUnitName(unit);
+        if (name.isNull())
+            return '';
+
+        return name.readUtf16String()!;
     }
 
     PrintGameString(msg: string, color: D2StringColor = D2StringColor.Default) {
@@ -788,6 +850,8 @@ export class D2Client extends D2Base {
         this.addrs.D2Client.PrintPartyString(s, color);
     }
 
+    // helper
+
     hasState(state: number): boolean {
         return this.activeStates.indexOf(state) != -1;
     }
@@ -807,6 +871,10 @@ export class D2Client extends D2Base {
         return true;
     }
 
+    getPlayerPosition() {
+        return D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
+    }
+
     leftSkillOnLocation(x: number, y: number) {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
@@ -815,7 +883,7 @@ export class D2Client extends D2Base {
         payload.add(0x01).writeU16(x);
         payload.add(0x03).writeU16(y);
 
-        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE))
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     leftSkillOnLocationEx(x: number, y: number) {
@@ -826,7 +894,29 @@ export class D2Client extends D2Base {
         payload.add(0x01).writeU16(x);
         payload.add(0x03).writeU16(y);
 
-        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE))
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    rightSkillOnLocation(x: number, y: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.RIGHTSKILLONLOCATION);
+        payload.add(0x01).writeU16(x);
+        payload.add(0x03).writeU16(y);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    rightSkillOnLocationEx(x: number, y: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.RIGHTSKILLONLOCATIONEX);
+        payload.add(0x01).writeU16(x);
+        payload.add(0x03).writeU16(y);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     selectSkill(lefthand: boolean, skillId: number) {
@@ -839,13 +929,104 @@ export class D2Client extends D2Base {
         payload.add(0x04).writeU8(lefthand ? 0x80 : 0x00);
         payload.add(0x05).writeU32(0xFFFFFFFF);
 
-        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE))
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    castSkill(skillId: number, lefthand: boolean = false, pos?: d2types.Position) {
+        if (!pos)
+            pos = D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
+
+        D2Game.D2Client.selectSkill(lefthand, skillId);
+        D2Game.D2Client.rightSkillOnLocation(pos.x, pos.y);
+    }
+
+    interactWithEntity(unitType: number, unitId: number) {
+        const SIZE = 9;
+        const payload = Memory.alloc(SIZE);
+        payload.writeU8(D2ClientCmd.INTERACTWITHENTITY).add(1).writeU32(unitType).add(4).writeU32(unitId);
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    npcInit(unitType: number, unitId: number) {
+        const SIZE = 9;
+        const payload = Memory.alloc(SIZE);
+        payload.add(0).writeU8(D2ClientCmd.NPC_INIT)
+               .add(1).writeU32(unitType)
+               .add(4).writeU32(unitId);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    entityAction(unitType: number, unitId: number, complement: number = 0) {
+        const SIZE = 0xD;
+        const payload = Memory.alloc(SIZE);
+        payload.add(0).writeU8(D2ClientCmd.ENTITYACTION)
+               .add(1).writeU32(unitType)
+               .add(4).writeU32(unitId)
+               .add(4).writeU32(complement);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    repair(npcUnitId: number, itemUnitId: number = 0) {
+        const SIZE = 0x11;
+        const payload = Memory.alloc(SIZE);
+        const repairOne = itemUnitId == 0 ? 0 : 1;
+        payload.add(0).writeU8(D2ClientCmd.REPAIR)
+               .add(1).writeU32(npcUnitId)
+               .add(4).writeU32(itemUnitId)
+               .add(4).writeU32(repairOne)
+               .add(4).writeU32(0x80000000);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    npcSell(npcUnitId: number, itemUnitId: number, cost: number) {
+        const SIZE = 0x11;
+        const payload = Memory.alloc(SIZE);
+        payload.writeU8(D2ClientCmd.NPC_SELL)
+               .add(1).writeU32(npcUnitId)
+               .add(4).writeU32(itemUnitId)
+               .add(4).writeU32(0)
+               .add(4).writeU32(cost);
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    npcCancel(unitType: number, unitId: number) {
+        const SIZE = 9;
+        const payload = Memory.alloc(SIZE);
+        payload.writeU8(D2ClientCmd.NPC_CANCEL).add(1).writeU32(unitType).add(4).writeU32(unitId);
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    useItem(unitId: number) {
+        const SIZE = 13;
+        const payload = Memory.alloc(SIZE);
+
+        const pos = this.getPlayerPosition();
+
+        payload.add(0).writeU8(D2ClientCmd.USEITEM)
+               .add(1).writeU32(unitId)
+               .add(4).writeU32(pos.x)
+               .add(4).writeU32(pos.y);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    dropItem(unitId: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.add(0).writeU8(D2ClientCmd.DROPITEM)
+               .add(1).writeU32(unitId);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     joinGame() {
         this.mainThreadCallbacks = [];
         this.gameLoaded = true;
-        this.gameJoinTime = utils.getCurrentTime().getTime();
+        this.gameJoinTime = utils.getCurrentTimestamp();
     }
 
     exitGame() {
@@ -854,14 +1035,13 @@ export class D2Client extends D2Base {
         this.leftSkill              = 0;
         this.rightSkill             = 0;
         this.activeStates           = [];
-        this.areaId                 = 0;
-        this.playerLocation         = {x: 0, y: 0};
+        this.levelNo                 = 0;
+        this.playerLocation         = d2types.Position.default();
         this.mainThreadCallbacks    = [];
     }
 
     onMapReveal(map: D2GSPacket.MapReveal) {
-        const areaId = D2Game.D2Common.getCurrentAreaID();
-        this.areaId = areaId;
+        this.levelNo = D2Game.D2Common.getCurrentLevelNo();
     }
 
     onSetSkill(skill: D2GSPacket.SetSkill) {
@@ -890,12 +1070,12 @@ export class D2Client extends D2Base {
 
     onWalkVerify(walk: D2GSPacket.WalkVerify) {
         // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
-        this.playerLocation = {x: walk.x, y: walk.y};
+        this.playerLocation = new d2types.Position(walk.x, walk.y);
     }
 
     onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
         // utils.log(`reassign player: ${player.x}, ${player.y}`);
-        this.playerLocation = {x: player.x, y: player.y};
+        this.playerLocation = new d2types.Position(player.x, player.y);
     }
 
     showKeyAction(name: string, state: boolean) {
@@ -975,18 +1155,113 @@ export class D2Common extends D2Base {
         return new d2types.Unit(this.addrs.D2Common.FindNearestUnitFromPos(unit, x, y, distance, callback));
     }
 
-    getCurrentAreaID(): D2AreaID {
-        const player = this.addrs.D2Client.GetPlayerUnit();
+    GetRoomFromUnit(unit: NativePointer): NativePointer {
+        return this.addrs.D2Common.GetRoomFromUnit(unit);
+    }
+
+    GetLevelNoFromRoom(room: NativePointer): number {
+        return this.addrs.D2Common.GetLevelNoFromRoom(room)
+    }
+
+    GetUnitPosition(unit: NativePointer, pos: NativePointer){
+        this.addrs.D2Common.GetUnitPosition(unit, pos)
+    }
+
+    GetUnitDistanceToPos(unit: NativePointer, x:number, y: number): number {
+        return this.addrs.D2Common.GetUnitDistanceToPos(unit, x, y)
+    }
+
+    GetUnitStat(unit: NativePointer, statId: number, index: number = 0): number {
+        return this.addrs.D2Common.GetUnitStat(unit, statId, index);
+    }
+
+    GetUnitStatByFlags(unit: NativePointer, flags: number): d2types.Stats {
+        return new d2types.Stats(this.addrs.D2Common.GetUnitStatByFlags(unit, flags));
+    }
+
+    GetCursorItem(inventory: NativePointer): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Common.GetCursorItem(inventory));
+    }
+
+    GetUnitDistance(unit: NativePointer, x: number, y: number): number {
+        return this.addrs.D2Common.GetUnitDistance(unit, x, y);
+    }
+
+    GetItemCode(unit: NativePointer): number {
+        return this.addrs.D2Common.GetItemCode(unit);
+    }
+
+    GetItemCodeString(unit: NativePointer): string {
+        const code = this.addrs.D2Common.GetItemCode(unit);
+        return String.fromCharCode(code & 0xFF, (code >> 8) & 0xFF, (code >> 16) & 0xFF, (code >> 24) & 0xFF);
+    }
+
+    CheckItemType(item: NativePointer, type: number): boolean {
+        return this.addrs.D2Common.CheckItemType(item, type) != 0;
+    }
+
+    InventoryGetItemLocation(item: NativePointer): number {
+        return this.addrs.D2Common.Inventory.GetItemLocation(item);
+    }
+
+    InventoryGetFirstItem(inventory: NativePointer): d2types.Unit {
+        return new d2types.Unit(this.addrs.D2Common.Inventory.GetFirstItem(inventory));
+    }
+
+    InventoryGetNextItem(item: NativePointer) {
+        return new d2types.Unit(this.addrs.D2Common.Inventory.GetNextItem(item));
+    }
+
+    // helper
+
+    getUnitPosition(unit: NativePointer): d2types.Position {
+        const pos = Memory.alloc(8);
+        this.GetUnitPosition(unit, pos);
+        return new d2types.Position(pos.readU32(), pos.add(4).readU32());
+    }
+
+    getCurrentLevelNo(): number {
+        const player = D2Game.D2Client.GetPlayerUnit();
         if (player.isNull())
-            return D2AreaID.None;
+            return D2LevelNo.None;
 
-        const room = this.addrs.D2Common.GetRoomFromUnit(player);
+        const room = this.GetRoomFromUnit(player);
         if (room.isNull())
-            return D2AreaID.None;
+            return D2LevelNo.None;
 
-        const levelno = this.addrs.D2Common.GetLevelNoFromRoom(room);
+        return this.GetLevelNoFromRoom(room);
+    }
 
-        return levelno;
+    enumInventoryItems(cb: (item: d2types.Unit) => boolean) {
+        D2Game.D2Client.scheduleOnMainThread(() => {
+            const player = D2Game.D2Client.GetPlayerUnit();
+            const inventory = player.Inventory;
+
+            for (let item = this.InventoryGetFirstItem(inventory); !item.isNull(); item = this.InventoryGetNextItem(item)) {
+                if (item.Type != D2UnitType.Item)
+                    continue;
+
+                if (cb(item))
+                    break;
+            }
+        });
+    }
+}
+
+export class D2Multi extends D2Base {
+    BNCreateGameTabOnClick(): boolean {
+        if (this.addrs.D2Multi.WaitForBNReadyStartTime.readU32() != 0)
+            return false;
+
+        if (this.addrs.D2Multi.CreateGameTabControl.readPointer().isNull())
+            return false;
+
+        this.addrs.D2Multi.BNCreateGameTabOnClick(NULL);
+        return true;
+    }
+
+    BNCreateGameBtnOnClick() {
+        return this.addrs.D2Multi.BNCreateGameBtnOnClick(NULL);
     }
 }
 

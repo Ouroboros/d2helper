@@ -1,3 +1,21 @@
+export class Position {
+    x: number;
+    y: number;
+
+    static default(): Position {
+        return new Position(0, 0);
+    }
+
+    constructor(x: number, y: number) {
+        this.x = x;
+        this.y = y;
+    }
+
+    toString(): string {
+        return `{x:${this.x},y:${this.y}}`;
+    }
+}
+
 export class GameInfo extends NativePointer {
     get Name(): string {
         return this.add(0x1F).readAnsiString()!;
@@ -77,7 +95,86 @@ export class Unit extends NativePointer {
         return this.add(0x0C).readU32();
     }
 
+    get Mode(): number {
+        return this.add(0x10).readU32();
+    }
+
+    get Path(): NativePointer {
+        return new Path(this.add(0x2C).readPointer());
+    }
+
     get Inventory(): NativePointer {
         return this.add(0x60).readPointer();
+    }
+
+    get ItemCode(): number {
+        return this.add(0xB8).readU32();
+    }
+
+    get ItemCodeString(): string {
+        return this.ItemCode.hexToString();
+    }
+}
+
+export class Inventory extends NativePointer {
+}
+
+export class Path extends NativePointer {
+    get Room(): NativePointer {
+        return this.readPointer();
+    }
+
+    get X(): number {
+        return this.add(0xC).readU32();
+    }
+
+    get Y(): number {
+        return this.add(0x10).readU32();
+    }
+}
+
+export class Stat extends NativePointer {
+    get Index(): number {
+        return this.readU16();
+    }
+
+    get ID(): number {
+        return this.add(2).readU16();
+    }
+
+    get Value(): number {
+        return this.add(4).readU32();
+    }
+}
+
+export class StatVector extends NativePointer {
+    get Stats(): NativePointer {
+        return this.readPointer();
+    }
+
+    get Count(): number {
+        return this.add(4).readU16();
+    }
+
+    get Capacity(): number {
+        return this.add(6).readU16();
+    }
+
+    at(index: number): Stat {
+        return new Stat(this.Stats.add(index * 8));
+    }
+}
+
+export class Stats extends NativePointer {
+    get UnitID(): number {
+        return this.readU32();
+    }
+
+    get Unit(): Unit {
+        return new Unit(this.add(4).readPointer());
+    }
+
+    get BaseStats(): StatVector {
+        return new StatVector(this.add(0x24));
     }
 }

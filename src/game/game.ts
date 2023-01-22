@@ -1,9 +1,11 @@
+import path from 'path';
 import * as utils from '../utils';
+import * as types from './types';
 import * as d2types from './d2types';
-import { API, Modules } from '../modules';
+import { API } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2AreaID, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
-import { ID2Addrs, D2Net, D2Client, D2Common, D2Lang } from './d2module';
+import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
+import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module';
 
 class HurricaneMonitor {
     _active         : boolean   = false;
@@ -50,13 +52,13 @@ class HurricaneMonitor {
     }
 
     onReceivePacket(packetId: D2GSCmd, payload: ArrayBuffer2) {
-        switch (D2Game.D2Common.getCurrentAreaID()) {
-            case D2AreaID.None:
-            case D2AreaID.RogueEncampment:
-            case D2AreaID.LutGholein:
-            case D2AreaID.KurastDocks:
-            case D2AreaID.PandemoniumFortress:
-            case D2AreaID.Harrogath:
+        switch (D2Game.D2Common.getCurrentLevelNo()) {
+            case D2LevelNo.None:
+            case D2LevelNo.RogueEncampment:
+            case D2LevelNo.LutGholein:
+            case D2LevelNo.KurastDocks:
+            case D2LevelNo.PandemoniumFortress:
+            case D2LevelNo.Harrogath:
                 this.active = false;
                 break;
 
@@ -134,7 +136,7 @@ class HurricaneMonitor {
         let timerId: NodeJS.Timer | undefined;
 
         const RetryInterval           = 500;
-        const MaxRetryTimes           = 5;
+        const MaxRetryTimes           = 10;
         const MaxAutoCastRetryTimes   = 2;
 
         const nextAction = () => {
@@ -278,13 +280,13 @@ class HurricaneMonitor {
 
         const leftSkill = D2Game.D2Client.leftSkill;
 
-        if (leftSkill != D2SkillID.Hurricane)
-            D2Game.D2Client.selectSkill(true, D2SkillID.Hurricane);
+        if (leftSkill != D2SkillID.Dru_Hurricane)
+            D2Game.D2Client.selectSkill(true, D2SkillID.Dru_Hurricane);
 
         D2Game.D2Client.leftSkillOnLocation(x, y);
         // D2Game.D2Client.leftSkillOnLocationEx(x, y);
 
-        if (leftSkill != D2SkillID.None && leftSkill != D2SkillID.Hurricane)
+        if (leftSkill != D2SkillID.None && leftSkill != D2SkillID.Dru_Hurricane)
             D2Game.D2Client.selectSkill(true, leftSkill);
     }
 }
@@ -299,19 +301,28 @@ namespace HurricaneMonitor {
 interface ID2Duck {
     AutoPick: {
         PrintHint           : NativePointer;
-        PickupItem          : NativePointer;
-        OnItemPickedUp      : NativePointer;
-        PutItemToCube       : NativePointer;
-        PutItemToCubeCehck1 : NativePointer;
+        // PickupItem          : NativePointer;
+        // OnItemPickedUp      : NativePointer;
+        // PutItemToCube       : NativePointer;
+        // PutItemToCubeCehck1 : NativePointer;
 
-        CallFindNearest     : NativePointer;
+        // CallFindNearest     : NativePointer;
 
         GetPickupType       : NativeFunction<number, [NativePointer]>;
     }
 
-    FunctionPointer: {
-        D2Common_FindNearestUnitFromPos : NativePointer;
+    MagicBag: {
+        GetCertainBagWhichStoreItem : NativeFunction<NativePointer, [NativePointer, NativePointer, NativePointer, NativePointer]>;
     }
+
+    Hackmap: {
+        GetUnitHiddenType           : NativeFunction<number, [NativePointer]>;
+        QuickNextGame               : NativeFunction<void, [number]>;
+    }
+
+    // FunctionPointer: {
+    //     D2Common_FindNearestUnitFromPos : NativePointer;
+    // }
 }
 
 export class D2Game {
@@ -321,6 +332,7 @@ export class D2Game {
     _D2Net?     : D2Net;
     _D2Client?  : D2Client;
     _D2Common?  : D2Common;
+    _D2Multi?   : D2Multi;
     _D2Lang?    : D2Lang;
 
     monitor?    : HurricaneMonitor;
@@ -349,6 +361,10 @@ export class D2Game {
         return D2Game.getInstance()._D2Common!;
     }
 
+    static get D2Multi() {
+        return D2Game.getInstance()._D2Multi!;
+    }
+
     static get D2Lang() {
         return D2Game.getInstance()._D2Lang!;
     }
@@ -363,6 +379,10 @@ export class D2Game {
 
     get D2Common() {
         return this._D2Common!;
+    }
+
+    get D2Multi() {
+        return this._D2Multi!;
     }
 
     get D2Lang() {
@@ -403,6 +423,7 @@ export class D2Game {
         this._D2Net     = new D2Net(addrs);
         this._D2Client  = new D2Client(addrs);
         this._D2Common  = new D2Common(addrs);
+        this._D2Multi   = new D2Multi(addrs);
         this._D2Lang    = new D2Lang(addrs);
 
         this.hook();
@@ -417,7 +438,114 @@ export class D2Game {
         this._D2Client?.hook();
     }
 
+    getD2Duck(): ID2Duck | undefined {
+        const d2duck = Process.findModuleByName('D2Duck.dll');
+        if (!d2duck)
+            return;
+
+        const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
+        switch (timestamp) {
+            // case 0x6395FBE6:
+            //     return {
+            //         AutoPick: {
+            //             PrintHint                       : d2duck.base.add(0x256C0),
+            //             // PickupItem                      : d2duck.base.add(0x5EFD0),
+            //             // OnItemPickedUp                  : d2duck.base.add(0x25500),
+            //             // PutItemToCube                   : d2duck.base.add(0x5EE90),
+            //             // PutItemToCubeCehck1             : d2duck.base.add(0x5EEEF),
+
+            //             // CallFindNearest                 : d2duck.base.add(0x25818),
+            //             GetPickupType                   : new NativeFunction(d2duck.base.add(0x25660), 'uint8', ['pointer'], 'mscdecl'),
+            //         },
+
+            //         MagicBag: {
+            //             GetCertainBagWhichStoreItem     : new NativeFunction(d2duck.base.add(0x4C3C0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'mscdecl'),
+            //         },
+
+            //         Hackmap: {
+            //             GetUnitHiddenType              : new NativeFunction(d2duck.base.add(0x1D5B0), 'uint8', ['pointer'], 'fastcall'),
+            //         },
+
+            //         // FunctionPointer: {
+            //         //     D2Common_FindNearestUnitFromPos : d2duck.base.add(0x4A00610),
+            //         // },
+            //     };
+
+            case 0x63CA4734:
+                return {
+                    AutoPick: {
+                        PrintHint                   : d2duck.base.add(0xF5171A0 - 0xF4F0000),
+                        GetPickupType               : new NativeFunction(d2duck.base.add(0xF517140 - 0xF4F0000), 'uint8', ['pointer'], 'mscdecl'),
+                    },
+
+                    MagicBag: {
+                        GetCertainBagWhichStoreItem : new NativeFunction(d2duck.base.add(0xF53F390 - 0xF4F0000), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'mscdecl'),
+                    },
+
+                    Hackmap: {
+                        GetUnitHiddenType           : new NativeFunction(d2duck.base.add(0xF50F040 - 0xF4F0000), 'uint8', ['pointer'], 'fastcall'),
+                        QuickNextGame               : new NativeFunction(d2duck.base.add(0xF512780 - 0xF4F0000), 'void', ['int32'], 'mscdecl'),
+                    },
+                };
+        }
+
+        return;
+    }
+
     hookD2Duck(d2duck: Module) {
+        // const MPQLoadFile = Interceptor2.jmp(
+        //     this.addrs!.Storm.LoadFile,
+        //     function(fileInfo: NativePointer, buffer: NativePointer, bufferSize: number, outputSize: NativePointer, arg5: number, arg6: number, arg7: number): number {
+        //         if (outputSize.isNull()) {
+        //             outputSize = Memory.alloc(4);
+        //         }
+
+        //         const ok = MPQLoadFile(fileInfo, buffer, bufferSize, outputSize, arg5, arg6, arg7);
+        //         if (!ok)
+        //             return ok;
+
+        //         // return ok;
+
+        //         const filename = fileInfo.add(8).readAnsiString()!;
+
+        //         if (filename == '(attributes)')
+        //             return ok;
+
+        //         if (!filename.toLocaleLowerCase().startsWith('data\\'))
+        //             return ok;
+
+        //         if (['.bin', '.tbl', '.txt'].indexOf(path.extname(filename)) == -1) {
+        //             return ok;
+        //         }
+
+        //         utils.log(`load ${filename}`);
+
+        //         const dumpPath = path.join('MPQDumped', filename).replaceAll('\\', '/');
+
+        //         // utils.log(`dumpPath: ${dumpPath}`);
+
+        //         const dirs = [];
+
+        //         for (let dir = path.dirname(dumpPath); dir != '.'; dir = path.dirname(dir)) {
+        //             dirs.push(dir);
+        //         }
+
+        //         for (let dir of dirs.reverse()) {
+        //             // utils.log(`create dir: ${dir}`);
+        //             API.WIN32.CreateDirectoryW(utils.UTF16(dir), NULL);
+        //         }
+
+        //         const fp = API.crt.wfopen(utils.UTF16(dumpPath.replaceAll('/', '\\')), utils.UTF16('wb'));
+        //         if (!fp.isNull()) {
+        //             API.crt.fwrite(buffer, outputSize.readU32(), 1, fp);
+        //             API.crt.fclose(fp);
+        //         }
+
+        //         return ok;
+        //     },
+        //     'uint32', ['pointer', 'pointer', 'uint32', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
+        // );
+
         const fopen = Interceptor2.jmp(
             API.crt.fopen,
             (path: NativePointer, mode: NativePointer): NativePointer => {
@@ -464,30 +592,7 @@ export class D2Game {
             'int32', ['pointer', 'pointer', 'pointer'], 'stdcall',
         );
 
-        const duck = function(): ID2Duck | undefined {
-            const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
-            switch (timestamp) {
-                case 0x6395FBE6:
-                    return {
-                        AutoPick: {
-                            PrintHint           : d2duck.base.add(0x256C0),
-                            PickupItem          : d2duck.base.add(0x5EFD0),
-                            OnItemPickedUp      : d2duck.base.add(0x25500),
-                            PutItemToCube       : d2duck.base.add(0x5EE90),
-                            PutItemToCubeCehck1 : d2duck.base.add(0x5EEEF),
-
-                            CallFindNearest     : d2duck.base.add(0x25818),
-                            GetPickupType       : new NativeFunction(d2duck.base.add(0x25660), 'uint8', ['pointer'], 'mscdecl'),
-                        },
-
-                        FunctionPointer: {
-                            D2Common_FindNearestUnitFromPos : d2duck.base.add(0x4A00610),
-                        },
-                    };
-            }
-
-            return undefined;
-        }();
+        const duck = this.getD2Duck()
 
         if (duck === undefined)
             return;
@@ -501,196 +606,65 @@ export class D2Game {
             'void', ['pointer', 'pointer'], 'mscdecl',
         );
 
-        this.fixAutoPick(duck);
+        const QuickNextGame = Interceptor2.jmp(
+            duck.Hackmap.QuickNextGame,
+            (step: number) => {
+                step = ptr(step).toInt32();
+                QuickNextGame(step < 0 ? -step : step);
+                if (step <= 0) {
+                    return;
+                }
+
+                let retry = 0;
+                const timerId = setInterval(function() {
+                    if (retry++ == 10)
+                        clearInterval(timerId);
+
+                    D2Game.D2Client.scheduleOnMainThread(function() {
+                        switch (D2Game.D2Client.ClientState) {
+                            case types.D2ClientState.None:
+                            case types.D2ClientState.JoinGame:
+                            {
+                                if (!D2Game.D2Multi.BNCreateGameTabOnClick()) {
+                                    break;
+                                }
+
+                                D2Game.D2Multi.BNCreateGameBtnOnClick();
+                                clearInterval(timerId);
+                                return;
+                            }
+                        }
+                    });
+
+                }, 500);
+            },
+            'void', ['uint32'], 'mscdecl',
+        );
+
+        // this.fixAutoPick(duck);
     }
 
     fixAutoPick(duck: ID2Duck) {
-        Interceptor2.call(
-            duck.AutoPick.PutItemToCubeCehck1,
-            () => {
-                const ret = this.addrs!.D2Client.sub_486D10();
+        // Interceptor2.call(
+        //     duck.AutoPick.PutItemToCubeCehck1,
+        //     () => {
+        //         const ret = this.addrs!.D2Client.sub_486D10();
 
-                if (ret == 0 || ret == 1)
-                    return 1;
+        //         if (ret == 0 || ret == 1)
+        //             return 1;
 
-                if (this.addrs!.D2Client.sub_44DB30()) {
-                    this.addrs!.D2Client.CancelTrade();
-                    return 0;
-                }
+        //         if (this.addrs!.D2Client.sub_44DB30()) {
+        //             this.addrs!.D2Client.CancelTrade();
+        //             return 0;
+        //         }
 
-                return 1;
-            },
-            'uint32', [],
-            'stdcall',
-        );
+        //         return 1;
+        //     },
+        //     'uint32', [],
+        //     'stdcall',
+        // );
 
         return;
-
-        const PutItemToCube = Interceptor2.jmp(
-            duck.AutoPick.PutItemToCube,
-            (player: NativePointer, inventory: NativePointer) => {
-                utils.log('PutItemToCube');
-                PutItemToCube(player, inventory);
-            },
-            'void', ['pointer', 'pointer'], 'mscdecl',
-        );
-
-        let lastPutInCubeTime = 0;
-        const AutoPickType_PutInCube = 2;
-        const itemsToBePutIntoCube: d2types.Unit[] = [];
-        const ItemToCubeIntervalInMs = 50;
-
-        setInterval(() => {
-            const now = utils.getCurrentTimestamp();
-            if (now - lastPutInCubeTime < ItemToCubeIntervalInMs)
-                return;
-
-            const item = itemsToBePutIntoCube.pop();
-            if (item === undefined)
-                return;
-
-            utils.log(`picked up 2: ${item.ID}`);
-            this.D2Client.scheduleOnMainThread(function() {
-                OnItemPickedUp(item);
-            });
-
-        }, 50);
-
-        const OnItemPickedUp = Interceptor2.jmp(
-            duck.AutoPick.OnItemPickedUp,
-            (itemUnit: NativePointer) => {
-                const item = new d2types.Unit(itemUnit);
-
-                utils.log(`OnItemPickedUp: ${item.ID}`);
-
-                if (duck.AutoPick.GetPickupType(item) == AutoPickType_PutInCube) {
-                    const now = utils.getCurrentTimestamp();
-
-                    if (now - lastPutInCubeTime < ItemToCubeIntervalInMs) {
-                        utils.log(`queue picked up: ${item.ID}`);
-                        itemsToBePutIntoCube.push(item);
-
-                    } else {
-                        lastPutInCubeTime = utils.getCurrentTimestamp();
-                        OnItemPickedUp(itemUnit);
-                    }
-
-                } else {
-                    utils.log(`picked up: ${item.ID}`);
-                    OnItemPickedUp(itemUnit);
-                }
-            },
-            'void', ['pointer'], 'mscdecl',
-        );
-
-        this.D2Net.onRecv((packetId: D2GSCmd, payload: utils.ArrayBuffer2) => {
-            switch (packetId) {
-                case D2GSCmd.ITEM_WORLD:
-                    {
-                        const p = payload.ptr;
-                        const action = p.add(1).readU8();
-                        const catalog = p.add(3).readU8();
-                        const unitId = p.add(4).readU32();
-
-                        utils.log(`ITEM_WORLD: action = ${action}, catalog = ${catalog}, unitId = ${unitId}`);
-
-                        if (action == 4) {
-                            const item = this.D2Client.FindClientSideUnit(unitId, D2UnitType.Item);
-
-                            if (item && duck.AutoPick.GetPickupType(item) == AutoPickType_PutInCube) {
-                                lastPutInCubeTime = utils.getCurrentTimestamp();
-                            }
-                        }
-
-                        break;
-                    }
-            }
-        });
-
-        const PickupItem = Interceptor2.jmp(
-            duck.AutoPick.PickupItem,
-            (unitId: number, hold: number) => {
-                do {
-                    if (hold == 0)
-                        break;
-
-                    const item = this.D2Client.FindClientSideUnit(unitId, D2UnitType.Item);
-
-                    if (!item)
-                        break;
-
-                    const autoPickupType = duck.AutoPick.GetPickupType(item);
-
-                    if (autoPickupType != AutoPickType_PutInCube)
-                        break;
-
-                    const now = utils.getCurrentTimestamp();
-
-                    if (now - lastPutInCubeTime < ItemToCubeIntervalInMs)
-                        return;
-
-                    utils.log(`PickupItem cube: ${unitId}`);
-                    PickupItem(unitId, hold);
-                    return;
-
-                } while (0);
-
-                utils.log(`PickupItem default: ${unitId}`);
-                PickupItem(unitId, hold);
-            },
-            'void', ['uint32', 'uint32'], 'mscdecl',
-        );
-
-        // let OrigFindNearestCallback: NativeFunction<number, [NativePointer, NativePointer]>;
-        // let itemsReadyToBePickedUp: number[] = [];
-
-        // const FindNearestCallback = new NativeCallback(
-        //     function(itemUnit: NativePointer, playerUnit: NativePointer): number {
-        //         const ok = OrigFindNearestCallback(itemUnit, playerUnit);
-        //         if (ok) {
-        //             const item = new d2types.Unit(itemUnit);
-        //             itemsReadyToBePickedUp.push(item.ID);
-        //             utils.log(`ready to pick: ${item.ID}`)
-        //         }
-        //         return ok;
-        //     },
-        //     'uint32', ['pointer', 'pointer'], 'fastcall',
-        // );
-
-        // let lastAutoPickTime = utils.getCurrentTimestamp();
-
-        // const AutoPickFindNearest = new NativeCallback(
-        //     (player: NativePointer, x: number, y: number, distance: number, callback: NativePointer): NativePointer => {
-        //         if (distance != 0) {
-        //             if (OrigFindNearestCallback === undefined) {
-        //                 OrigFindNearestCallback = new NativeFunction(callback, 'uint32', ['pointer', 'pointer'], 'fastcall');
-        //             }
-
-        //             callback = FindNearestCallback;
-        //         }
-
-        //         let itemUnit = this.D2Common.FindNearestUnitFromPos(player, x, y, distance, callback);
-
-        //         if (itemsReadyToBePickedUp.length != 0) {
-        //             utils.log(itemsReadyToBePickedUp);
-        //             itemsReadyToBePickedUp.splice(0);
-
-        //             const now = utils.getCurrentTimestamp();
-        //             if (now - lastAutoPickTime < 300) {
-        //                 (itemUnit as NativePointer) = NULL;
-        //             } else {
-        //                 lastAutoPickTime = now;
-        //             }
-        //         }
-
-        //         return itemUnit;
-        //     },
-        //     'pointer', ['pointer', 'uint32', 'uint32', 'uint32', 'pointer'], 'stdcall',
-        // );
-
-        // Interceptor.attach(addrs.AutoPick.CallFindNearest, function(args) {
-        //     (this.context as Ia32CpuContext).ecx = AutoPickFindNearest;
-        // });
     }
 
     recordImportItem(item: d2types.Unit) {
@@ -726,7 +700,7 @@ export class D2Game {
         const name      = this.D2Lang.GetStringFromIndex(bin.NameStrIndex);
         const quality   = this.D2Common.GetItemQuality(item);
         const gameInfo  = this.D2Client.GameInfo;
-        const itemIndex = this.getItemIndex(item);
+        const itemIndex = this.getItemMaphackID(item);
         // const time      = new Date().getTime();
         // const time2     = new Date(time + 8 * 3600 * 1000);
         const time      = utils.getCurrentTime().getTime();
@@ -738,14 +712,14 @@ export class D2Game {
             `${time}`,
             `${timestr}`,
             `${gameInfo?.Name}`,
-            `${this.D2Client.GetLevelNameFromLevelNo(this.D2Common.getCurrentAreaID())}`,
+            `${this.D2Client.GetLevelNameFromLevelNo(this.D2Common.getCurrentLevelNo())}`,
             `${itemIndex},${D2ItemQualityCN[quality]},${name}`,
         ].join(','));
 
         API.crt.fclose(fp);
     }
 
-    getItemIndex(item: d2types.Unit): number {
+    getItemMaphackID(item: d2types.Unit): number {
         const itemTable     = this.D2Common.ItemTable;
         const weaponCount   = itemTable.WeaponTableCount;
         const armorCount    = itemTable.ArmorTableCount;
@@ -772,26 +746,141 @@ export function main(addrs: ID2Addrs) {
 
 rpc.exports = function() {
     return {
+        test() {
+            D2Game.getInstance().getD2Duck()!.Hackmap.QuickNextGame(-1);
+            // Interceptor.attach(ptr(0x00501290), {
+            //     onEnter: function(args) {
+            //         this.desc = args[0];
+            //     },
+            //     onLeave: function(retval) {
+            //         utils.log(`create btn: ${retval} @ ${this.desc}`);
+            //     },
+            // });
+            return;
+
+            D2Game.D2Client.scheduleOnMainThread(() => {
+                D2Game.D2Multi.BNCreateGameTabOnClick();
+                D2Game.D2Multi.BNCreateGameBtnOnClick();
+            });
+        },
+
         showInfo: function() {
-            const areaId = D2Game.D2Client.areaId;
+            const levelNo = D2Game.D2Client.levelNo;
             const gameInfo = D2Game.D2Client.GameInfo;
 
             utils.log([
                 `show game info:`,
                 `gameInfo: ${gameInfo?.Name}:${gameInfo?.Password}`,
                 `skill left:${D2Game.D2Client.leftSkill.hex()} right:${D2Game.D2Client.rightSkill.hex()}`,
-                `areaid: ${D2AreaID[areaId] !== undefined ? D2AreaID[areaId] : areaId.hex()}`,
+                `levelNo: ${D2LevelNo[levelNo] !== undefined ? D2LevelNo[levelNo] : levelNo.hex()}`,
                 `gameLoaded: ${D2Game.D2Client.gameLoaded}`,
                 `player location: ${D2Game.D2Client.playerLocation.x}, ${D2Game.D2Client.playerLocation.y}`,
                 '',
             ].join('\n'));
         },
 
-        printItemNameFromUnit(txtFileno: number) {
+        printItemNameFromTxtFileNo(txtFileno: number) {
             const bin   = D2Game.D2Common.GetItemsBIN(txtFileno);
             const name  = D2Game.D2Lang.GetStringFromIndex(bin.NameStrIndex);
 
             utils.log(name);
+        },
+
+        enumUnits(range: number) {
+            D2Game.D2Client.scheduleOnMainThread(function() {
+                const player = D2Game.D2Client.GetPlayerUnit();
+                const pos = D2Game.D2Common.getUnitPosition(player);
+                D2Game.D2Common.FindNearestUnitFromPos(player, pos.x, pos.y, range, new NativeCallback(
+                    (target: NativePointer, source: NativePointer): number => {
+                        const unit = new d2types.Unit(target);
+
+                        if (unit.Type != D2UnitType.Monster || unit.TxtFileNo != 154)
+                            return 0;
+
+                        const pos = D2Game.D2Common.getUnitPosition(unit);
+
+                        console.log();
+                        utils.log(`type         = ${unit.Type}`);
+                        utils.log(`txtfileno    = ${unit.TxtFileNo}`);
+                        utils.log(`id           = ${unit.ID}`);
+                        utils.log(`code         = ${unit.ItemCode}`);
+                        utils.log(`code         = ${unit.ItemCodeString}`);
+                        utils.log(`name         = ${D2Game.D2Client.GetUnitName(unit)}`);
+                        utils.log(`pos          = ${pos.toString()}`);
+                        console.log();
+
+                        D2Game.D2Client.castSkill(D2SkillID.Sor_Teleport, false, pos);
+
+                        return 0;
+                    },
+                    'uint32', ['pointer', 'pointer'], 'fastcall',
+                ));
+            });
+        },
+
+        enumItems() {
+            D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit) {
+                const locatoin = D2Game.D2Common.InventoryGetItemLocation(item);
+                if (locatoin != types.D2ItemLocation.Equipped)
+                    return false;
+
+                if (D2Game.D2Common.GetItemQuality(item) != types.D2ItemQuality.Unique)
+                    return false;
+
+                const itemCode = D2Game.D2Common.GetItemCodeString(item);
+                utils.log(`<${itemCode}> ${D2Game.D2Client.GetUnitName(item)}`);
+
+                return false;
+            });
+        },
+
+        sellMagicBag() {
+            const MagicBagCode = 'mbg ';
+
+            let found = true;
+
+            const timerid = setInterval(function() {
+                if (!found) {
+                    clearInterval(timerid);
+                }
+
+                found = false;
+
+                D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit): boolean {
+                    if (D2Game.D2Common.InventoryGetItemLocation(item) != types.D2ItemLocation.Inventory)
+                        return false;
+
+                    const code = D2Game.D2Common.GetItemCodeString(item);
+                    if (code != MagicBagCode)
+                        return false;
+
+                    const stats = D2Game.D2Common.GetUnitStatByFlags(item, 0x40);
+                    if (stats.isNull())
+                        return false;
+
+                    const baseStat = stats.BaseStats;
+                    if (baseStat.Count >= 6) {
+                        return false;
+                    }
+
+                    let keepCount = 0;
+                    for (let i = 0; i != baseStat.Count; i++) {
+                        const st = baseStat.at(i);
+                        keepCount += Number(st.Value.hexToString() != MagicBagCode);
+                    }
+
+                    if (keepCount != 0)
+                        return false;
+
+                    utils.log(`bag: ${baseStat} slots: ${keepCount} / ${baseStat.Count}, id: ${item.ID}`);
+
+                    found = true;
+                    D2Game.D2Client.npcSell(14, item.ID, 0);
+
+                    return true;
+                });
+
+            }, 100);
         },
     };
 }();
