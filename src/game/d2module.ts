@@ -875,6 +875,17 @@ export class D2Client extends D2Base {
         return D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
     }
 
+    runToLocation(x: number, y: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.RUNTOLOCATION)
+        payload.add(0x01).writeU16(x)
+        payload.add(0x03).writeU16(y);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
     leftSkillOnLocation(x: number, y: number) {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
@@ -943,16 +954,21 @@ export class D2Client extends D2Base {
     interactWithEntity(unitType: number, unitId: number) {
         const SIZE = 9;
         const payload = Memory.alloc(SIZE);
-        payload.writeU8(D2ClientCmd.INTERACTWITHENTITY).add(1).writeU32(unitType).add(4).writeU32(unitId);
+
+        payload.writeU8(D2ClientCmd.INTERACTWITHENTITY);
+        payload.add(1).writeU32(unitType);
+        payload.add(5).writeU32(unitId);
+
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     npcInit(unitType: number, unitId: number) {
         const SIZE = 9;
         const payload = Memory.alloc(SIZE);
-        payload.add(0).writeU8(D2ClientCmd.NPC_INIT)
-               .add(1).writeU32(unitType)
-               .add(4).writeU32(unitId);
+
+        payload.writeU8(D2ClientCmd.NPC_INIT)
+        payload.add(1).writeU32(unitType)
+        payload.add(5).writeU32(unitId);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -960,10 +976,11 @@ export class D2Client extends D2Base {
     entityAction(unitType: number, unitId: number, complement: number = 0) {
         const SIZE = 0xD;
         const payload = Memory.alloc(SIZE);
-        payload.add(0).writeU8(D2ClientCmd.ENTITYACTION)
-               .add(1).writeU32(unitType)
-               .add(4).writeU32(unitId)
-               .add(4).writeU32(complement);
+
+        payload.writeU8(D2ClientCmd.ENTITYACTION)
+        payload.add(1).writeU32(unitType)
+        payload.add(5).writeU32(unitId)
+        payload.add(9).writeU32(complement);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -972,11 +989,12 @@ export class D2Client extends D2Base {
         const SIZE = 0x11;
         const payload = Memory.alloc(SIZE);
         const repairOne = itemUnitId == 0 ? 0 : 1;
-        payload.add(0).writeU8(D2ClientCmd.REPAIR)
-               .add(1).writeU32(npcUnitId)
-               .add(4).writeU32(itemUnitId)
-               .add(4).writeU32(repairOne)
-               .add(4).writeU32(0x80000000);
+
+        payload.writeU8(D2ClientCmd.REPAIR)
+        payload.add(0x01).writeU32(npcUnitId)
+        payload.add(0x05).writeU32(itemUnitId)
+        payload.add(0x09).writeU32(repairOne)
+        payload.add(0x0D).writeU32(0x80000000);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -984,31 +1002,37 @@ export class D2Client extends D2Base {
     npcSell(npcUnitId: number, itemUnitId: number, cost: number) {
         const SIZE = 0x11;
         const payload = Memory.alloc(SIZE);
+
         payload.writeU8(D2ClientCmd.NPC_SELL)
-               .add(1).writeU32(npcUnitId)
-               .add(4).writeU32(itemUnitId)
-               .add(4).writeU32(0)
-               .add(4).writeU32(cost);
+        payload.add(0x01).writeU32(npcUnitId)
+        payload.add(0x05).writeU32(itemUnitId)
+        payload.add(0x09).writeU32(0)
+        payload.add(0x0D).writeU32(cost);
+
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     npcCancel(unitType: number, unitId: number) {
         const SIZE = 9;
         const payload = Memory.alloc(SIZE);
-        payload.writeU8(D2ClientCmd.NPC_CANCEL).add(1).writeU32(unitType).add(4).writeU32(unitId);
+
+        payload.writeU8(D2ClientCmd.NPC_CANCEL);
+        payload.add(1).writeU32(unitType);
+        payload.add(5).writeU32(unitId);
+
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
     useItem(unitId: number) {
-        const SIZE = 13;
+        const SIZE = 0xD;
         const payload = Memory.alloc(SIZE);
 
         const pos = this.getPlayerPosition();
 
-        payload.add(0).writeU8(D2ClientCmd.USEITEM)
-               .add(1).writeU32(unitId)
-               .add(4).writeU32(pos.x)
-               .add(4).writeU32(pos.y);
+        payload.writeU8(D2ClientCmd.USEITEM)
+        payload.add(1).writeU32(unitId)
+        payload.add(5).writeU32(pos.x)
+        payload.add(9).writeU32(pos.y);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -1017,8 +1041,8 @@ export class D2Client extends D2Base {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
 
-        payload.add(0).writeU8(D2ClientCmd.DROPITEM)
-               .add(1).writeU32(unitId);
+        payload.writeU8(D2ClientCmd.DROPITEM)
+        payload.add(1).writeU32(unitId);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }

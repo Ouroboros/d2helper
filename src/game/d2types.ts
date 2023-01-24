@@ -11,6 +11,16 @@ export class Position {
         this.y = y;
     }
 
+    equals(p: Position): boolean {
+        return this.x == p.x && this.y == p.y;
+    }
+
+    set(p: Position): Position {
+        this.x = p.x;
+        this.y = p.y;
+        return this;
+    }
+
     toString(): string {
         return `{x:${this.x},y:${this.y}}`;
     }

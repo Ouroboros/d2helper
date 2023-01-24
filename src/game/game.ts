@@ -96,6 +96,9 @@ class HurricaneMonitor {
                 if (state.state != D2StateID.Hurricane)
                     return;
 
+                if (state.unitGUID != D2Game.D2Client.GetPlayerUnit().ID)
+                    return;
+
                 if (this.duration == 0 && this.startTime != 0) {
                     // this.duration = ((new Date).getTime() - this.startTime) / 1000;
                     this.duration = (utils.getCurrentTime().getTime() - this.startTime) / 1000;
@@ -493,58 +496,7 @@ export class D2Game {
     }
 
     hookD2Duck(d2duck: Module) {
-        // const MPQLoadFile = Interceptor2.jmp(
-        //     this.addrs!.Storm.LoadFile,
-        //     function(fileInfo: NativePointer, buffer: NativePointer, bufferSize: number, outputSize: NativePointer, arg5: number, arg6: number, arg7: number): number {
-        //         if (outputSize.isNull()) {
-        //             outputSize = Memory.alloc(4);
-        //         }
-
-        //         const ok = MPQLoadFile(fileInfo, buffer, bufferSize, outputSize, arg5, arg6, arg7);
-        //         if (!ok)
-        //             return ok;
-
-        //         // return ok;
-
-        //         const filename = fileInfo.add(8).readAnsiString()!;
-
-        //         if (filename == '(attributes)')
-        //             return ok;
-
-        //         if (!filename.toLocaleLowerCase().startsWith('data\\'))
-        //             return ok;
-
-        //         if (['.bin', '.tbl', '.txt'].indexOf(path.extname(filename)) == -1) {
-        //             return ok;
-        //         }
-
-        //         utils.log(`load ${filename}`);
-
-        //         const dumpPath = path.join('MPQDumped', filename).replaceAll('\\', '/');
-
-        //         // utils.log(`dumpPath: ${dumpPath}`);
-
-        //         const dirs = [];
-
-        //         for (let dir = path.dirname(dumpPath); dir != '.'; dir = path.dirname(dir)) {
-        //             dirs.push(dir);
-        //         }
-
-        //         for (let dir of dirs.reverse()) {
-        //             // utils.log(`create dir: ${dir}`);
-        //             API.WIN32.CreateDirectoryW(utils.UTF16(dir), NULL);
-        //         }
-
-        //         const fp = API.crt.wfopen(utils.UTF16(dumpPath.replaceAll('/', '\\')), utils.UTF16('wb'));
-        //         if (!fp.isNull()) {
-        //             API.crt.fwrite(buffer, outputSize.readU32(), 1, fp);
-        //             API.crt.fclose(fp);
-        //         }
-
-        //         return ok;
-        //     },
-        //     'uint32', ['pointer', 'pointer', 'uint32', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
-        // );
+        // this.dumpMPQFiles();
 
         const fopen = Interceptor2.jmp(
             API.crt.fopen,
@@ -642,6 +594,61 @@ export class D2Game {
         );
 
         // this.fixAutoPick(duck);
+    }
+
+    dumpMPQFiles() {
+        const MPQLoadFile = Interceptor2.jmp(
+            this.addrs!.Storm.LoadFile,
+            function(fileInfo: NativePointer, buffer: NativePointer, bufferSize: number, outputSize: NativePointer, arg5: number, arg6: number, arg7: number): number {
+                if (outputSize.isNull()) {
+                    outputSize = Memory.alloc(4);
+                }
+
+                const ok = MPQLoadFile(fileInfo, buffer, bufferSize, outputSize, arg5, arg6, arg7);
+                if (!ok)
+                    return ok;
+
+                // return ok;
+
+                const filename = fileInfo.add(8).readAnsiString()!;
+
+                if (filename == '(attributes)')
+                    return ok;
+
+                if (!filename.toLocaleLowerCase().startsWith('data\\'))
+                    return ok;
+
+                if (['.bin', '.tbl', '.txt'].indexOf(path.extname(filename)) == -1) {
+                    return ok;
+                }
+
+                utils.log(`load ${filename}`);
+
+                const dumpPath = path.join('MPQDumped', filename).replaceAll('\\', '/');
+
+                // utils.log(`dumpPath: ${dumpPath}`);
+
+                const dirs = [];
+
+                for (let dir = path.dirname(dumpPath); dir != '.'; dir = path.dirname(dir)) {
+                    dirs.push(dir);
+                }
+
+                for (let dir of dirs.reverse()) {
+                    // utils.log(`create dir: ${dir}`);
+                    API.WIN32.CreateDirectoryW(utils.UTF16(dir), NULL);
+                }
+
+                const fp = API.crt.wfopen(utils.UTF16(dumpPath.replaceAll('/', '\\')), utils.UTF16('wb'));
+                if (!fp.isNull()) {
+                    API.crt.fwrite(buffer, outputSize.readU32(), 1, fp);
+                    API.crt.fclose(fp);
+                }
+
+                return ok;
+            },
+            'uint32', ['pointer', 'pointer', 'uint32', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
+        );
     }
 
     fixAutoPick(duck: ID2Duck) {
@@ -747,17 +754,6 @@ export function main(addrs: ID2Addrs) {
 rpc.exports = function() {
     return {
         test() {
-            D2Game.getInstance().getD2Duck()!.Hackmap.QuickNextGame(-1);
-            // Interceptor.attach(ptr(0x00501290), {
-            //     onEnter: function(args) {
-            //         this.desc = args[0];
-            //     },
-            //     onLeave: function(retval) {
-            //         utils.log(`create btn: ${retval} @ ${this.desc}`);
-            //     },
-            // });
-            return;
-
             D2Game.D2Client.scheduleOnMainThread(() => {
                 D2Game.D2Multi.BNCreateGameTabOnClick();
                 D2Game.D2Multi.BNCreateGameBtnOnClick();
@@ -794,7 +790,7 @@ rpc.exports = function() {
                     (target: NativePointer, source: NativePointer): number => {
                         const unit = new d2types.Unit(target);
 
-                        if (unit.Type != D2UnitType.Monster || unit.TxtFileNo != 154)
+                        if (unit.Type != D2UnitType.Monster)
                             return 0;
 
                         const pos = D2Game.D2Common.getUnitPosition(unit);
@@ -807,9 +803,8 @@ rpc.exports = function() {
                         utils.log(`code         = ${unit.ItemCodeString}`);
                         utils.log(`name         = ${D2Game.D2Client.GetUnitName(unit)}`);
                         utils.log(`pos          = ${pos.toString()}`);
+                        utils.log(`hp           = ${D2Game.D2Common.GetUnitStat(unit, types.D2StatID.HP)}`);
                         console.log();
-
-                        D2Game.D2Client.castSkill(D2SkillID.Sor_Teleport, false, pos);
 
                         return 0;
                     },
