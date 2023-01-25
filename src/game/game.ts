@@ -133,7 +133,7 @@ class HurricaneMonitor {
         let maxRetry            = 0;
         let nextRetryTime       = 0;
         let autoCastTime        = 0;
-        let autoCastRetry   = 0;
+        let autoCastRetry       = 0;
         let currentAction       = HurricaneMonitor.Action.Idle;
         let previousDisabled    = false;
         let timerId: NodeJS.Timer | undefined;
@@ -441,10 +441,10 @@ export class D2Game {
         this._D2Client?.hook();
     }
 
-    getD2Duck(): ID2Duck | undefined {
+    getD2Duck(): ID2Duck | null {
         const d2duck = Process.findModuleByName('D2Duck.dll');
         if (!d2duck)
-            return;
+            return null;
 
         const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
         switch (timestamp) {
@@ -492,7 +492,7 @@ export class D2Game {
                 };
         }
 
-        return;
+        return null;
     }
 
     hookD2Duck(d2duck: Module) {
@@ -546,7 +546,7 @@ export class D2Game {
 
         const duck = this.getD2Duck()
 
-        if (duck === undefined)
+        if (duck == null)
             return;
 
         const AutoPickPrintHint = Interceptor2.jmp(
@@ -755,8 +755,59 @@ rpc.exports = function() {
     return {
         test() {
             D2Game.D2Client.scheduleOnMainThread(() => {
-                D2Game.D2Multi.BNCreateGameTabOnClick();
-                D2Game.D2Multi.BNCreateGameBtnOnClick();
+                const pos = D2Game.D2Client.getPlayerPosition();
+                return D2Game.D2Common.findNearbyUnits(D2Game.D2Client.GetPlayerUnit(), 20, (unit: d2types.Unit, source: d2types.Unit, room1: d2types.Room1) => {
+                    if (unit.Type != D2UnitType.Item)
+                        return false;
+
+                    const d = Math.floor(D2Game.D2Common.getUnitDistanceByPoints(pos, D2Game.D2Common.getUnitPosition(unit)));
+                    utils.log(`<${unit}> type: ${unit.Type} name: ${D2Game.D2Client.GetUnitName(unit)} d: ${d}`);
+
+                    return false;
+                });
+
+                const unit = D2Game.D2Common.findRoomTileByLevelNo(30, 8);
+                if (!unit) {
+                    utils.log('tile not found');
+                    return;
+                }
+
+                utils.log(`${unit}`);
+                D2Game.D2Client.interactWithEntity(unit!.Type, unit!.ID);
+
+                return;
+
+                const room1 = D2Game.D2Common.GetRoomFromUnit(D2Game.D2Client.GetPlayerUnit());
+                const rooms = D2Game.D2Common.GetNearbyRooms(room1);
+
+                utils.log(`room1: ${room1}`);
+
+                const lines = [''];
+
+                for (let r of rooms) {
+                    const lvlno = D2Game.D2Common.GetLevelNoFromRoom(r);
+                    let unit = r.FirstUnit;
+                    const room2 = r.Room2;
+
+                    if (unit.isNull())
+                        continue;
+
+                    lines.push(`  room1: ${r} room2: ${room2} tiles: ${room2.RoomTiles}`);
+
+                    while (!unit.isNull()) {
+                        const pos = D2Game.D2Common.getUnitPosition(unit);
+                        const playerPos = D2Game.D2Client.getPlayerPosition();
+                        const distance = D2Game.D2Common.getUnitDistanceByPoints(pos, playerPos);
+                        lines.push(`    unit: ${unit} lvlno: ${lvlno} first_unit<${unit.Type}>: ${unit} pos: ${pos} @ ${Math.floor(distance)} name:${D2Game.D2Client.GetUnitName(unit)}`);
+
+                        unit = unit.NextRoomUnit;
+                    }
+
+                    lines.push('');
+                }
+
+                lines.push('');
+                utils.log(lines.join('\n'));
             });
         },
 
@@ -782,7 +833,7 @@ rpc.exports = function() {
             utils.log(name);
         },
 
-        enumUnits(range: number) {
+        enumUnits(range: number = 5) {
             D2Game.D2Client.scheduleOnMainThread(function() {
                 const player = D2Game.D2Client.GetPlayerUnit();
                 const pos = D2Game.D2Common.getUnitPosition(player);
@@ -790,21 +841,30 @@ rpc.exports = function() {
                     (target: NativePointer, source: NativePointer): number => {
                         const unit = new d2types.Unit(target);
 
-                        if (unit.Type != D2UnitType.Monster)
+                        if (unit.Type == D2UnitType.Player)
                             return 0;
 
                         const pos = D2Game.D2Common.getUnitPosition(unit);
+                        const room = D2Game.D2Common.GetRoomFromUnit(unit);
+                        const levelNo = D2Game.D2Common.GetLevelNoFromRoom(room);
+                        const lvlbin = D2Game.D2Common.LevelGetLevelsBin(levelNo);
 
-                        console.log();
-                        utils.log(`type         = ${unit.Type}`);
-                        utils.log(`txtfileno    = ${unit.TxtFileNo}`);
-                        utils.log(`id           = ${unit.ID}`);
-                        utils.log(`code         = ${unit.ItemCode}`);
-                        utils.log(`code         = ${unit.ItemCodeString}`);
-                        utils.log(`name         = ${D2Game.D2Client.GetUnitName(unit)}`);
-                        utils.log(`pos          = ${pos.toString()}`);
-                        utils.log(`hp           = ${D2Game.D2Common.GetUnitStat(unit, types.D2StatID.HP)}`);
-                        console.log();
+                        console.log([
+                            '',
+                            `ptr          = ${unit}`,
+                            `type         = ${unit.Type}`,
+                            `txtfileno    = ${unit.TxtFileNo}`,
+                            `id           = ${unit.ID}`,
+                            `code         = ${unit.ItemCode}`,
+                            `code         = ${unit.ItemCodeString}`,
+                            `name         = ${D2Game.D2Client.GetUnitName(unit)}`,
+                            `pos          = ${pos.toString()}`,
+                            `hp           = ${D2Game.D2Common.GetUnitStat(unit, types.D2StatID.HP)}`,
+                            `lvlbin       = ${lvlbin}`,
+                            `levelName    = ${lvlbin.LevelName}`,
+                            `room2        = ${unit.Path.Room1}`,
+                            '',
+                        ].join('\n'));
 
                         return 0;
                     },

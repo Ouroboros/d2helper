@@ -258,7 +258,8 @@ export enum D2LevelNo {
     KurastDocks                 = 0x4B,     // 库拉斯特海港
     PandemoniumFortress         = 0x67,     // 群魔堡垒
     Harrogath                   = 0x6D,     // 哈洛加斯
-    Cow1                        = 0x89,     // 牛一
+    Cow1                        = 137,      // 牛一
+    Cow2                        = 151,      // 牛二
 }
 
 export enum D2UnitType {
@@ -267,11 +268,34 @@ export enum D2UnitType {
     Object                      = 2,
     Missile                     = 3,
     Item                        = 4,
-    Tile                        = 5,
+    RoomTile                    = 5,
 }
 
 export enum D2ItemType {
     Gold                        = 4,
+}
+
+export enum D2UnitPlayerMode {
+    DEATH                       = 0,        // death
+    STAND_OUTTOWN               = 1,        // standing outside town
+    WALK_OUTTOWN                = 2,        // walking outside town
+    RUN                         = 3,        // running
+    BEING_HIT                   = 4,        // being hit
+    STAND_INTOWN                = 5,        // standing inside town
+    WALK_INTOWN                 = 6,        // walking outside town
+    ATTACK1                     = 7,        // attacking 1
+    ATTACK2                     = 8,        // attacking 2
+    BLOCK                       = 9,        // blocking
+    CAST                        = 10,       // casting spell
+    THROW                       = 11,       // throwing
+    KICK                        = 12,       // kicking (assassin)
+    USESKILL1                   = 13,       // using skill 1
+    USESKILL2                   = 14,       // using skill 2
+    USESKILL3                   = 15,       // using skill 3
+    USESKILL4                   = 16,       // using skill 4
+    DEAD                        = 17,       // dead
+    SEQUENCE                    = 18,       // sequence
+    BEING_KNOCKBACK             = 19,
 }
 
 export enum D2UnitItemMode {
@@ -358,6 +382,7 @@ export enum D2StatID {
     MaxHP                       = 7,
     Mana                        = 8,
     MaxMana                     = 9,
+    ColdResist                  = 43,
     Durability                  = 72,
     MaxDurability               = 73,
 }

@@ -52,6 +52,14 @@ export interface ID2Addrs {
         GetUnitDistance         : NativeFunction<number, [NativePointer, number, number]>;
         GetItemCode             : NativeFunction<number, [NativePointer]>;
 
+        Room: {
+            GetNearbyRooms        : NativeFunction<void, [NativePointer, NativePointer, NativePointer]>;
+        },
+
+        Level: {
+            GetLevelsBin        : NativeFunction<NativePointer, [number]>;
+        }
+
         Inventory: {
             GetItemLocation     : NativeFunction<number, [NativePointer]>;
             GetFirstItem        : NativeFunction<NativePointer, [NativePointer]>;
@@ -788,9 +796,9 @@ export class D2Client extends D2Base {
         };
     }
 
-    get GameInfo(): d2types.GameInfo | undefined {
+    get GameInfo(): d2types.GameInfo | null {
         const p = this.addrs.D2Client.GameInfo.readPointer();
-        return p.isNull() ? undefined : new d2types.GameInfo(p);
+        return p.isNull() ? null : new d2types.GameInfo(p);
     }
 
     get ClientState(): D2ClientState {
@@ -852,6 +860,106 @@ export class D2Client extends D2Base {
 
     // helper
 
+    onMapReveal(map: D2GSPacket.MapReveal) {
+        this.levelNo = D2Game.D2Common.getCurrentLevelNo();
+    }
+
+    onSetSkill(skill: D2GSPacket.SetSkill) {
+        if (skill.leftHand) {
+            this.leftSkill = skill.skillId;
+        } else {
+            this.rightSkill = skill.skillId;
+        }
+    }
+
+    onSetState(state: D2GSPacket.SetState) {
+        if (state.unitGUID != this.GetPlayerUnit().ID)
+            return;
+
+        switch (state.state) {
+            case D2StateID.SkillCooldown:
+            case D2StateID.Hurricane:
+                utils.log(`set state: ${state.state.hex()}`);
+                this.addState(state.state);
+                break;
+        }
+    }
+
+    onEndState(state: D2GSPacket.EndState) {
+        if (this.removeState(state.state)) {
+            utils.log(`remove state: ${state.state.hex()}`);
+        }
+    }
+
+    onWalkVerify(walk: D2GSPacket.WalkVerify) {
+        // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
+        this.playerLocation = new d2types.Position(walk.x, walk.y);
+    }
+
+    onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
+        // utils.log(`reassign player: ${player.x}, ${player.y}`);
+        this.playerLocation = new d2types.Position(player.x, player.y);
+    }
+
+    showKeyAction(name: string, state: boolean) {
+        this.PrintPartyString(`${name} Toggle -> ${state ? 'OFF' : 'ON'}`, D2StringColor.Orange);
+        this.PrintPartyString('Key Action:', D2StringColor.Purple)
+    }
+
+    scheduleOnMainThread(fn: () => void) {
+        if (Process.getCurrentThreadId() == this.mainThreadId) {
+            fn();
+        } else {
+            this.mainThreadCallbacks.push(fn);
+        }
+    }
+
+    onIdleLoop(fn: () => void) {
+        this.idleLoopCallbacks.push(fn);
+    }
+
+    onKeyDown(fn: (vk: number) => void) {
+        this.keyDownCallbacks.push(fn);
+    }
+
+    idleLoop() {
+        for (let cb of this.idleLoopCallbacks) {
+            cb();
+        }
+
+        const queue = this.mainThreadCallbacks.splice(0);
+
+        if (queue.length == 0)
+            return;
+
+        for (let fn of queue) {
+            fn();
+        }
+    }
+
+    messageLoop(msg: NativePointer) {
+        const message = msg.add(4).readU32();
+
+        // utils.log(`msg: ${message.hex()}`);
+
+        switch (message) {
+            case 0x100:    // WM_KEYDOWN
+            {
+                const vk = msg.add(8).readU32();
+                const previousKeyState = msg.add(0xC).readU32() & 0x40000000;
+
+                if (previousKeyState == 0) {
+                    for (let cb of this.keyDownCallbacks)
+                        cb(vk);
+                }
+
+                // utils.log(`vk = ${vk}, re = ${previousKeyState.hex()}`);
+
+                break;
+            }
+        }
+    }
+
     hasState(state: number): boolean {
         return this.activeStates.indexOf(state) != -1;
     }
@@ -871,15 +979,26 @@ export class D2Client extends D2Base {
         return true;
     }
 
-    getPlayerPosition() {
-        return D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
-    }
-
     runToLocation(x: number, y: number) {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
 
         payload.writeU8(D2ClientCmd.RUNTOLOCATION)
+        payload.add(0x01).writeU16(x)
+        payload.add(0x03).writeU16(y);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+
+        const path = this.GetPlayerUnit().Path;
+        path.X = x;
+        path.Y = y;
+    }
+
+    updatePlayerPos(x: number, y: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.UPDATEPLAYERPOS)
         payload.add(0x01).writeU16(x)
         payload.add(0x03).writeU16(y);
 
@@ -1064,101 +1183,8 @@ export class D2Client extends D2Base {
         this.mainThreadCallbacks    = [];
     }
 
-    onMapReveal(map: D2GSPacket.MapReveal) {
-        this.levelNo = D2Game.D2Common.getCurrentLevelNo();
-    }
-
-    onSetSkill(skill: D2GSPacket.SetSkill) {
-        if (skill.leftHand) {
-            this.leftSkill = skill.skillId;
-        } else {
-            this.rightSkill = skill.skillId;
-        }
-    }
-
-    onSetState(state: D2GSPacket.SetState) {
-        switch (state.state) {
-            case D2StateID.SkillCooldown:
-            case D2StateID.Hurricane:
-                utils.log(`set state: ${state.state.hex()}`);
-                this.addState(state.state);
-                break;
-        }
-    }
-
-    onEndState(state: D2GSPacket.EndState) {
-        if (this.removeState(state.state)) {
-            utils.log(`remove state: ${state.state.hex()}`);
-        }
-    }
-
-    onWalkVerify(walk: D2GSPacket.WalkVerify) {
-        // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
-        this.playerLocation = new d2types.Position(walk.x, walk.y);
-    }
-
-    onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
-        // utils.log(`reassign player: ${player.x}, ${player.y}`);
-        this.playerLocation = new d2types.Position(player.x, player.y);
-    }
-
-    showKeyAction(name: string, state: boolean) {
-        this.PrintPartyString(`${name} Toggle -> ${state ? 'OFF' : 'ON'}`, D2StringColor.Orange);
-        this.PrintPartyString('Key Action:', D2StringColor.Purple)
-    }
-
-    scheduleOnMainThread(fn: () => void) {
-        if (Process.getCurrentThreadId() == this.mainThreadId) {
-            fn();
-        } else {
-            this.mainThreadCallbacks.push(fn);
-        }
-    }
-
-    onIdleLoop(fn: () => void) {
-        this.idleLoopCallbacks.push(fn);
-    }
-
-    onKeyDown(fn: (vk: number) => void) {
-        this.keyDownCallbacks.push(fn);
-    }
-
-    idleLoop() {
-        for (let cb of this.idleLoopCallbacks) {
-            cb();
-        }
-
-        const queue = this.mainThreadCallbacks.splice(0);
-
-        if (queue.length == 0)
-            return;
-
-        for (let fn of queue) {
-            fn();
-        }
-    }
-
-    messageLoop(msg: NativePointer) {
-        const message = msg.add(4).readU32();
-
-        // utils.log(`msg: ${message.hex()}`);
-
-        switch (message) {
-            case 0x100:    // WM_KEYDOWN
-            {
-                const vk = msg.add(8).readU32();
-                const previousKeyState = msg.add(0xC).readU32() & 0x40000000;
-
-                if (previousKeyState == 0) {
-                    for (let cb of this.keyDownCallbacks)
-                        cb(vk);
-                }
-
-                // utils.log(`vk = ${vk}, re = ${previousKeyState.hex()}`);
-
-                break;
-            }
-        }
+    getPlayerPosition() {
+        return D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
     }
 }
 
@@ -1167,8 +1193,8 @@ export class D2Common extends D2Base {
         return new d2types.ItemTable(this.addrs.D2Common.ItemTable);
     }
 
-    GetItemsBIN(itemId: number): d2types.ItemsBIN {
-        return new d2types.ItemsBIN(this.addrs.D2Common.GetItemsBIN(itemId));
+    GetItemsBIN(itemId: number): d2types.ItemsBin {
+        return new d2types.ItemsBin(this.addrs.D2Common.GetItemsBIN(itemId));
     }
 
     GetItemQuality(item: NativePointer): D2ItemQuality {
@@ -1179,8 +1205,29 @@ export class D2Common extends D2Base {
         return new d2types.Unit(this.addrs.D2Common.FindNearestUnitFromPos(unit, x, y, distance, callback));
     }
 
-    GetRoomFromUnit(unit: NativePointer): NativePointer {
-        return this.addrs.D2Common.GetRoomFromUnit(unit);
+    GetRoomFromUnit(unit: NativePointer): d2types.Room1 {
+        return new d2types.Room1(this.addrs.D2Common.GetRoomFromUnit(unit));
+    }
+
+    GetNearbyRooms(room1: NativePointer): d2types.Room1[] {
+        const rooms = Memory.alloc(Process.pointerSize);
+        const count = Memory.alloc(4);
+
+        this.addrs.D2Common.Room.GetNearbyRooms(room1, rooms, count);
+
+        const n = count.readU32();
+
+        if (n == 0)
+            return [];
+
+        const p = rooms.readPointer();
+        const roomsNear = [];
+
+        for (let i = 0, n = count.readU32(); i != n; i++) {
+            roomsNear.push(new d2types.Room1(p.add(i * Process.pointerSize).readPointer()));
+        }
+
+        return roomsNear;
     }
 
     GetLevelNoFromRoom(room: NativePointer): number {
@@ -1236,12 +1283,20 @@ export class D2Common extends D2Base {
         return new d2types.Unit(this.addrs.D2Common.Inventory.GetNextItem(item));
     }
 
+    LevelGetLevelsBin(levelNo: number): d2types.LevelsBin {
+        return new d2types.LevelsBin(this.addrs.D2Common.Level.GetLevelsBin(levelNo));
+    }
+
     // helper
 
     getUnitPosition(unit: NativePointer): d2types.Position {
         const pos = Memory.alloc(8);
         this.GetUnitPosition(unit, pos);
         return new d2types.Position(pos.readU32(), pos.add(4).readU32());
+    }
+
+    getUnitDistanceByPoints(pos1: d2types.Position, pos2: d2types.Position) {
+        return Math.abs(Math.sqrt(Math.pow(pos2.x - pos1.x, 2) + Math.pow(pos2.y - pos1.y, 2)))
     }
 
     getCurrentLevelNo(): number {
@@ -1268,6 +1323,57 @@ export class D2Common extends D2Base {
                 if (cb(item))
                     break;
             }
+        });
+    }
+
+    findNearbyUnits(source: d2types.Unit, range: number, cb: (unit: d2types.Unit, source: d2types.Unit, room1: d2types.Room1) => boolean): d2types.Unit | null {
+        const room1       = this.GetRoomFromUnit(source);
+        const nearbyRooms = this.GetNearbyRooms(room1);
+        const sourcePos   = this.getUnitPosition(source);
+
+        let targetUnit = null;
+        let lastDistance = 10000;
+
+        for (let room of nearbyRooms) {
+            for (let unit = room.FirstUnit; !unit.isNull(); unit = unit.NextRoomUnit) {
+                const pos = this.getUnitPosition(unit);
+                const distance = this.getUnitDistanceByPoints(pos, sourcePos);
+
+                if (distance > range || distance > lastDistance)
+                    continue;
+
+                if (!cb(unit, source, room))
+                    continue;
+
+                lastDistance = distance;
+                targetUnit = unit;
+            }
+        }
+
+        return targetUnit;
+    }
+
+    findRoomTileByLevelNo(range: number, levelNo: number): d2types.Unit | null {
+        const player            = D2Game.D2Client.GetPlayerUnit();
+        const room1             = this.GetRoomFromUnit(player);
+        const currentLevelNo    = this.GetLevelNoFromRoom(room1);
+
+        return this.findNearbyUnits(player, range, (unit: d2types.Unit, source: d2types.Unit, room1: d2types.Room1) => {
+            if (unit.Type != D2UnitType.RoomTile)
+                return false;
+
+            if (this.GetLevelNoFromRoom(room1) != currentLevelNo)
+                return false;
+
+            for (let tile = room1.Room2.RoomTiles; !tile.isNull(); tile = tile.Next) {
+                if (tile.TargetTxtFileNo != unit.TxtFileNo)
+                    continue;
+
+                if (tile.Room2.Level.LevelNo == levelNo)
+                    return true;
+            }
+
+            return false;
         });
     }
 }
