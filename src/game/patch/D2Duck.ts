@@ -1,10 +1,10 @@
-import * as utils from '../../utils';
-import * as types from '../types';
-import * as d2types from '../d2types';
-import { API } from '../../modules';
-import { Interceptor2 } from '../../utils';
-import { D2Game } from '../game';
-import { D2UnitType, D2ItemQualityCN } from '../types';
+import * as utils from '../../utils.js';
+import * as types from '../types.js';
+import * as d2types from '../d2types.js';
+import { API } from '../../modules.js';
+import { Interceptor2 } from '../../utils.js';
+import { D2Game } from '../game.js';
+import { D2UnitType, D2ItemQualityCN } from '../types.js';
 
 export interface ID2Duck {
     AutoPick: {

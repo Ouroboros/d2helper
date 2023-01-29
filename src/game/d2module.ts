@@ -1,9 +1,9 @@
-import * as utils from '../utils';
-import * as d2types from './d2types';
-import { API, Modules } from '../modules';
-import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types';
-import { D2Game } from './game';
+import * as utils from '../utils.js';
+import * as d2types from './d2types.js';
+import { API, Modules } from '../modules.js';
+import { ArrayBuffer2, Interceptor2 } from '../utils.js';
+import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types.js';
+import { D2Game } from './game.js';
 
 export interface ID2Addrs {
     D2Net: {
@@ -1075,7 +1075,11 @@ export class D2Client extends D2Base {
             pos = D2Game.D2Client.getPlayerPosition();
 
         D2Game.D2Client.selectSkill(lefthand, skillId);
-        D2Game.D2Client.rightSkillOnLocation(pos.x, pos.y);
+        if (lefthand) {
+            D2Game.D2Client.leftSkillOnLocation(pos.x, pos.y);
+        } else {
+            D2Game.D2Client.rightSkillOnLocation(pos.x, pos.y);
+        }
     }
 
     interactWithEntity(unitType: number, unitId: number) {

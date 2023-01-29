@@ -1,5 +1,5 @@
-import { sprintf, vsprintf } from "sprintf-js";
-import { API } from "./modules";
+// import { sprintf, vsprintf } from "sprintf-js";
+import { API } from "./modules.js";
 
 export const Logging = !false;
 
@@ -124,20 +124,17 @@ export function getCurrentTimestamp(): number {
     return getCurrentTime().getTime();
 }
 
-export function log(format: any, ...args: any[]): void {
+export function log(s: string): void {
     if (!Logging)
         return;
-
-    if (args.length != 0) {
-        format = vsprintf(format, args);
-    }
 
     // const offset = (8 * 3600 - now.getTimezoneOffset()) / 3600;
     // const now1 = new Date;
     // const now = new Date(now1.getTime() + 8 * 3600 * 1000);
     const now = getCurrentTime();
-    const time = sprintf('%02d:%02d:%02d.%03d', now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
-    const msg = `${time} <${Process.getCurrentThreadId()}> ${format}`;
+    // const time = sprintf('%02d:%02d:%02d.%03d', now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds());
+    const time = `${now.getUTCHours().pad(2)}:${now.getUTCMinutes().pad(2)}:${now.getUTCSeconds().pad(2)}.${now.getUTCMilliseconds().pad(3)}`
+    const msg = `${time} <${Process.getCurrentThreadId()}> ${s}`;
     console.log(msg);
     send({msg: 'log', data: msg});
 }

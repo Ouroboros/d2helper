@@ -1,4 +1,4 @@
-import { Modules } from "../modules";
+import { Modules } from "../modules.js";
 
 export const Addrs = {
     D2Net: {

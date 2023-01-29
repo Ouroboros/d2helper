@@ -1,5 +1,5 @@
-import { Addrs } from "./addrs";
-import * as game from "../game/game"
+import { Addrs } from "./addrs.js";
+import * as game from "../game/game.js";
 
 export function main() {
     game.main(Addrs);

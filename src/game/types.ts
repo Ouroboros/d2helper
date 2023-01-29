@@ -494,7 +494,7 @@ export namespace D2GSPacket {
             this.unitGUID   = ptr.add(0x02).readU32();
             this.x          = ptr.add(0x06).readU16();
             this.y          = ptr.add(0x08).readU16();
-            this.bool       = ptr.add(0x01).readU8();
+            this.bool       = ptr.add(0x09).readU8();
         }
     }
 }

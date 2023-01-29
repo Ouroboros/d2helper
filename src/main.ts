@@ -1,5 +1,5 @@
-import * as utils from "./utils";
-import * as game from "./114d/main";
+import * as utils from "./utils.js";
+import * as game from "./114d/main.js";
 
 function main() {
     try {

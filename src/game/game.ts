@@ -1,11 +1,14 @@
-import * as utils from '../utils';
-import * as types from './types';
-import * as d2types from './d2types';
-import { API } from '../modules';
-import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
-import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module';
-import { D2DuckPatch } from './patch/D2Duck';
+import * as utils from '../utils.js';
+import * as types from './types.js';
+import * as d2types from './d2types.js';
+import { API } from '../modules.js';
+import { ArrayBuffer2, Interceptor2 } from '../utils.js';
+import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType, D2ItemQualityCN } from './types.js';
+import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module.js';
+import { D2DuckPatch } from './patch/D2Duck.js';
+import { InternalPatch } from './patch/internal.js';
+import { BotAutoKC } from './bot_kc.js';
+import { BotAutoKC as BotAutoKCV2 } from './bot_kc_v2.js';
 
 class HurricaneMonitor {
     _active         = false;
@@ -420,12 +423,12 @@ export class D2Game {
 
     installPatches() {
         new D2DuckPatch().install();
-        import('./patch/internal').then((m) => { new m.InternalPatch().install(); }).catch((reason) => { utils.log(reason); });
+        new InternalPatch().install();
     }
 
     installModules() {
-        // import('./bot_kc').then((m) => { new m.BotAutoKC().install(); });
-        import('./bot_kc_v2').then((m) => { new m.BotAutoKC().install(); }).catch((reason) => { utils.log(reason); });
+        // new BotAutoKC().install();
+        new BotAutoKCV2().install();
     }
 
     getItemMaphackID(item: d2types.Unit): number {
