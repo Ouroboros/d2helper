@@ -38,6 +38,30 @@ Number.prototype.hexToString = function () {
 };
 
 export class Interceptor2 {
+    private static iatCallbacks: NativePointer[] = [];
+
+    static iat<RetType extends NativeCallbackReturnType, ArgTypes extends NativeCallbackArgumentType[] | []> (
+        target: NativePointer,
+        replacement: NativeCallbackImplementation<
+                GetNativeCallbackReturnValue<RetType>,
+                Extract<GetNativeCallbackArgumentValue<ArgTypes>, unknown[]>
+            >,
+        retType : RetType,
+        argTypes: ArgTypes,
+        abi     : NativeABI,
+    ) {
+        const callback = new NativeCallback(replacement, retType, argTypes, abi);
+        const orig = new NativeFunction(target.readPointer(), retType, argTypes, abi);
+
+        Memory.patchCode(target, Process.pointerSize, (code) => {
+            code.writePointer(callback);
+        });
+
+        Interceptor2.iatCallbacks.push(callback as NativePointer);
+
+        return orig;
+    }
+
     static call<RetType extends NativeCallbackReturnType, ArgTypes extends NativeCallbackArgumentType[] | []> (
         target: NativePointerValue,
         replacement: NativeCallbackImplementation<
@@ -71,7 +95,7 @@ export class Interceptor2 {
     }
 }
 
-let TimeZoneOffset: number | undefined;
+let TimeZoneOffset: number | null;
 
 class Date2 extends Date {
     getTime(): number {
@@ -82,7 +106,7 @@ class Date2 extends Date {
 export function getCurrentTime(timestamp? : number): Date {
     const now = timestamp === undefined ? new Date : new Date(timestamp);
 
-    if (TimeZoneOffset === undefined) {
+    if (TimeZoneOffset == null) {
         TimeZoneOffset = (8 * 3600 + now.getTimezoneOffset() * 60) * 1000;
         // console.log(`TimeZoneOffset: ${TimeZoneOffset}`);
         // console.log(`now.getTimezoneOffset: ${now.getTimezoneOffset()}`);

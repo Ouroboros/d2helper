@@ -230,7 +230,7 @@ export enum D2ClientState {
     None                        = 0,
     CreatingGame                = 1,
     InGame                      = 2,
-    JoinGame                    = 3,
+    GameList                    = 3,
 }
 
 export enum D2SkillID {

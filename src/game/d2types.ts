@@ -147,8 +147,8 @@ export class Unit extends NativePointer {
         return new ItemPath(this.add(0x2C).readPointer());
     }
 
-    get Inventory(): NativePointer {
-        return this.add(0x60).readPointer();
+    get Inventory(): Inventory {
+        return new Inventory(this.add(0x60).readPointer());
     }
 
     get ItemCode(): number {

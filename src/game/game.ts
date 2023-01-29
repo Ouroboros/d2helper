@@ -1,4 +1,3 @@
-import path from 'path';
 import * as utils from '../utils';
 import * as types from './types';
 import * as d2types from './d2types';
@@ -6,14 +5,15 @@ import { API } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
 import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType, D2ItemQualityCN } from './types';
 import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module';
+import { D2DuckPatch } from './patch/D2Duck';
 
 class HurricaneMonitor {
-    _active         : boolean   = false;
-    _disabled       : boolean   = false;
-    duration        : number    = 0;
-    startTime       : number    = 0;
-    nextCastTime    : number    = 0;
-    actionQueue     : HurricaneMonitor.Action[] = [];
+    _active         = false;
+    _disabled       = false;
+    duration        = 0;
+    startTime       = 0;
+    nextCastTime    = 0;
+    actionQueue: HurricaneMonitor.Action[] = [];
 
     constructor() {
         this.setupCastHurricaneTimer();
@@ -135,8 +135,7 @@ class HurricaneMonitor {
         let autoCastTime        = 0;
         let autoCastRetry       = 0;
         let currentAction       = HurricaneMonitor.Action.Idle;
-        let previousDisabled    = false;
-        let timerId: NodeJS.Timer | undefined;
+        let timerId: NodeJS.Timer | undefined = undefined;
 
         const RetryInterval           = 500;
         const MaxRetryTimes           = 10;
@@ -147,7 +146,7 @@ class HurricaneMonitor {
             return a === undefined ? HurricaneMonitor.Action.Idle : a;
         }
 
-        const setAutoCastTime = (now: number, reset: boolean = false) => {
+        const setAutoCastTime = (now: number, reset = false) => {
             if (reset)
                 autoCastRetry = 0;
 
@@ -301,33 +300,6 @@ namespace HurricaneMonitor {
     }
 }
 
-interface ID2Duck {
-    AutoPick: {
-        PrintHint           : NativePointer;
-        // PickupItem          : NativePointer;
-        // OnItemPickedUp      : NativePointer;
-        // PutItemToCube       : NativePointer;
-        // PutItemToCubeCehck1 : NativePointer;
-
-        // CallFindNearest     : NativePointer;
-
-        GetPickupType       : NativeFunction<number, [NativePointer]>;
-    }
-
-    MagicBag: {
-        GetCertainBagWhichStoreItem : NativeFunction<NativePointer, [NativePointer, NativePointer, NativePointer, NativePointer]>;
-    }
-
-    Hackmap: {
-        GetUnitHiddenType           : NativeFunction<number, [NativePointer]>;
-        QuickNextGame               : NativeFunction<void, [number]>;
-    }
-
-    // FunctionPointer: {
-    //     D2Common_FindNearestUnitFromPos : NativePointer;
-    // }
-}
-
 export class D2Game {
     static _instance = new D2Game;
 
@@ -394,12 +366,11 @@ export class D2Game {
 
     init(addrs: ID2Addrs) {
         const d2DuckLoaded = Process.findModuleByName('D2Duck.dll') != null;
-        const D2Duck = Module.load('D2Duck.dll');
+
+        Module.load('D2Duck.dll');
 
         this.addrs = addrs;
-
-        // this.init2(addrs);
-        this.hookD2Duck(D2Duck);
+        this.installPatches();
 
         if (d2DuckLoaded) {
             this.init2(addrs);
@@ -434,6 +405,8 @@ export class D2Game {
         this.monitor = new HurricaneMonitor();
         this.D2Net.onRecv(this.monitor.onReceivePacket.bind(this.monitor));
         this.D2Net.onSend(this.monitor.onSendPacket.bind(this.monitor));
+
+        this.installModules();
     }
 
     hook() {
@@ -441,289 +414,18 @@ export class D2Game {
         this._D2Client?.hook();
     }
 
-    getD2Duck(): ID2Duck | null {
-        const d2duck = Process.findModuleByName('D2Duck.dll');
-        if (!d2duck)
-            return null;
-
-        const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
-        switch (timestamp) {
-            // case 0x6395FBE6:
-            //     return {
-            //         AutoPick: {
-            //             PrintHint                       : d2duck.base.add(0x256C0),
-            //             // PickupItem                      : d2duck.base.add(0x5EFD0),
-            //             // OnItemPickedUp                  : d2duck.base.add(0x25500),
-            //             // PutItemToCube                   : d2duck.base.add(0x5EE90),
-            //             // PutItemToCubeCehck1             : d2duck.base.add(0x5EEEF),
-
-            //             // CallFindNearest                 : d2duck.base.add(0x25818),
-            //             GetPickupType                   : new NativeFunction(d2duck.base.add(0x25660), 'uint8', ['pointer'], 'mscdecl'),
-            //         },
-
-            //         MagicBag: {
-            //             GetCertainBagWhichStoreItem     : new NativeFunction(d2duck.base.add(0x4C3C0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'mscdecl'),
-            //         },
-
-            //         Hackmap: {
-            //             GetUnitHiddenType              : new NativeFunction(d2duck.base.add(0x1D5B0), 'uint8', ['pointer'], 'fastcall'),
-            //         },
-
-            //         // FunctionPointer: {
-            //         //     D2Common_FindNearestUnitFromPos : d2duck.base.add(0x4A00610),
-            //         // },
-            //     };
-
-            case 0x63CA4734:
-                return {
-                    AutoPick: {
-                        PrintHint                   : d2duck.base.add(0xF5171A0 - 0xF4F0000),
-                        GetPickupType               : new NativeFunction(d2duck.base.add(0xF517140 - 0xF4F0000), 'uint8', ['pointer'], 'mscdecl'),
-                    },
-
-                    MagicBag: {
-                        GetCertainBagWhichStoreItem : new NativeFunction(d2duck.base.add(0xF53F390 - 0xF4F0000), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'mscdecl'),
-                    },
-
-                    Hackmap: {
-                        GetUnitHiddenType           : new NativeFunction(d2duck.base.add(0xF50F040 - 0xF4F0000), 'uint8', ['pointer'], 'fastcall'),
-                        QuickNextGame               : new NativeFunction(d2duck.base.add(0xF512780 - 0xF4F0000), 'void', ['int32'], 'mscdecl'),
-                    },
-                };
-        }
-
-        return null;
+    getD2Duck() {
+        return D2DuckPatch.getD2Duck();
     }
 
-    hookD2Duck(d2duck: Module) {
-        // this.dumpMPQFiles();
-
-        const fopen = Interceptor2.jmp(
-            API.crt.fopen,
-            (path: NativePointer, mode: NativePointer): NativePointer => {
-                const filename = path.readAnsiString();
-
-                if (filename == 'hackmap\\d2hackmap.cfg') {
-                    const filename2 = utils.UTF8(filename + '.user');
-                    const fp = fopen(filename2, mode);
-
-                    if (!fp.isNull()) {
-                        return fp;
-                    }
-                }
-
-                return fopen(path, mode);
-            },
-            'pointer', ['pointer', 'pointer'], 'mscdecl',
-        );
-
-        const CheckTokenMembership = Interceptor2.jmp(
-            API.ADVAPI32.CheckTokenMembership,
-            (tokenHandle: NativePointer, sidToCheck: NativePointer, isMember: NativePointer): number => {
-                const success = CheckTokenMembership(tokenHandle, sidToCheck, isMember);
-
-                do {
-                    if (success == 0)
-                        break;
-
-                    if (
-                            sidToCheck.add(0x01).readU8() != 2 ||           // SubAuthorityCount
-                            sidToCheck.add(0x02).readU32() != 0 ||          // SECURITY_NT_AUTHORITY
-                            sidToCheck.add(0x06).readU16() != 0x500 ||      // SECURITY_NT_AUTHORITY
-                            sidToCheck.add(0x08).readU16() != 0x20 ||       // SECURITY_BUILTIN_DOMAIN_RID
-                            sidToCheck.add(0x0C).readU16() != 0x220         // DOMAIN_ALIAS_RID_ADMINS
-                        )
-                        break;
-
-                    isMember.writeU32(1);
-
-                } while (0);
-
-                return success;
-            },
-            'int32', ['pointer', 'pointer', 'pointer'], 'stdcall',
-        );
-
-        const duck = this.getD2Duck()
-
-        if (duck == null)
-            return;
-
-        const AutoPickPrintHint = Interceptor2.jmp(
-            duck.AutoPick.PrintHint,
-            (prefix: NativePointer, itemUnit: NativePointer) => {
-                AutoPickPrintHint(prefix, itemUnit);
-                this.recordImportItem(new d2types.Unit(itemUnit));
-            },
-            'void', ['pointer', 'pointer'], 'mscdecl',
-        );
-
-        const QuickNextGame = Interceptor2.jmp(
-            duck.Hackmap.QuickNextGame,
-            (step: number) => {
-                step = ptr(step).toInt32();
-                QuickNextGame(step < 0 ? -step : step);
-                if (step <= 0) {
-                    return;
-                }
-
-                let retry = 0;
-                const timerId = setInterval(function() {
-                    if (retry++ == 10)
-                        clearInterval(timerId);
-
-                    D2Game.D2Client.scheduleOnMainThread(function() {
-                        switch (D2Game.D2Client.ClientState) {
-                            case types.D2ClientState.None:
-                            case types.D2ClientState.JoinGame:
-                            {
-                                if (!D2Game.D2Multi.BNCreateGameTabOnClick()) {
-                                    break;
-                                }
-
-                                D2Game.D2Multi.BNCreateGameBtnOnClick();
-                                clearInterval(timerId);
-                                return;
-                            }
-                        }
-                    });
-
-                }, 500);
-            },
-            'void', ['uint32'], 'mscdecl',
-        );
-
-        // this.fixAutoPick(duck);
+    installPatches() {
+        new D2DuckPatch().install();
+        import('./patch/internal').then((m) => { new m.InternalPatch().install(); }).catch((reason) => { utils.log(reason); });
     }
 
-    dumpMPQFiles() {
-        const MPQLoadFile = Interceptor2.jmp(
-            this.addrs!.Storm.LoadFile,
-            function(fileInfo: NativePointer, buffer: NativePointer, bufferSize: number, outputSize: NativePointer, arg5: number, arg6: number, arg7: number): number {
-                if (outputSize.isNull()) {
-                    outputSize = Memory.alloc(4);
-                }
-
-                const ok = MPQLoadFile(fileInfo, buffer, bufferSize, outputSize, arg5, arg6, arg7);
-                if (!ok)
-                    return ok;
-
-                // return ok;
-
-                const filename = fileInfo.add(8).readAnsiString()!;
-
-                if (filename == '(attributes)')
-                    return ok;
-
-                if (!filename.toLocaleLowerCase().startsWith('data\\'))
-                    return ok;
-
-                if (['.bin', '.tbl', '.txt'].indexOf(path.extname(filename)) == -1) {
-                    return ok;
-                }
-
-                utils.log(`load ${filename}`);
-
-                const dumpPath = path.join('MPQDumped', filename).replaceAll('\\', '/');
-
-                // utils.log(`dumpPath: ${dumpPath}`);
-
-                const dirs = [];
-
-                for (let dir = path.dirname(dumpPath); dir != '.'; dir = path.dirname(dir)) {
-                    dirs.push(dir);
-                }
-
-                for (let dir of dirs.reverse()) {
-                    // utils.log(`create dir: ${dir}`);
-                    API.WIN32.CreateDirectoryW(utils.UTF16(dir), NULL);
-                }
-
-                const fp = API.crt.wfopen(utils.UTF16(dumpPath.replaceAll('/', '\\')), utils.UTF16('wb'));
-                if (!fp.isNull()) {
-                    API.crt.fwrite(buffer, outputSize.readU32(), 1, fp);
-                    API.crt.fclose(fp);
-                }
-
-                return ok;
-            },
-            'uint32', ['pointer', 'pointer', 'uint32', 'pointer', 'uint32', 'uint32', 'uint32'], 'stdcall',
-        );
-    }
-
-    fixAutoPick(duck: ID2Duck) {
-        // Interceptor2.call(
-        //     duck.AutoPick.PutItemToCubeCehck1,
-        //     () => {
-        //         const ret = this.addrs!.D2Client.sub_486D10();
-
-        //         if (ret == 0 || ret == 1)
-        //             return 1;
-
-        //         if (this.addrs!.D2Client.sub_44DB30()) {
-        //             this.addrs!.D2Client.CancelTrade();
-        //             return 0;
-        //         }
-
-        //         return 1;
-        //     },
-        //     'uint32', [],
-        //     'stdcall',
-        // );
-
-        return;
-    }
-
-    recordImportItem(item: d2types.Unit) {
-        if (item.isNull())
-            return;
-
-        const fp = API.crt.wfopen(utils.UTF16('ImportItems.txt'), utils.UTF16('ab+'));
-        if (fp.isNull()) {
-            return;
-        }
-
-        function writeString(s: string) {
-            s += '\n';
-            const buf = Memory.alloc(s.length * 3);
-            buf.writeUtf8String(s);
-            API.crt.fwrite(buf, API.crt.strlen(buf), 1, fp);
-        }
-
-        const fileSize = API.crt._filelengthi64(API.crt._fileno(fp)).valueOf();
-
-        switch (fileSize) {
-            case 0:
-                const bom = Memory.alloc(3);
-                bom.writeU8(0xEF).add(1).writeU8(0xBB).add(1).writeU8(0xBF);
-                API.crt.fwrite(bom, 3, 1, fp);
-
-            case 3: // BOM only
-                writeString('创建时间,拾取时间戳,拾取时间,游戏名,场景,物品ID,品质,名称');
-                break;
-        }
-
-        const bin       = this.D2Common.GetItemsBIN(item.TxtFileNo);
-        const name      = this.D2Lang.GetStringFromIndex(bin.NameStrIndex);
-        const quality   = this.D2Common.GetItemQuality(item);
-        const gameInfo  = this.D2Client.GameInfo;
-        const itemIndex = this.getItemMaphackID(item);
-        // const time      = new Date().getTime();
-        // const time2     = new Date(time + 8 * 3600 * 1000);
-        const time      = utils.getCurrentTime().getTime();
-        const time2     = utils.getCurrentTime();
-        const timestr   = `${(time2.getUTCMonth() + 1).pad(2)}.${time2.getUTCDate().pad(2)} ${time2.getHours().pad(2)}:${time2.getMinutes().pad(2)}:${time2.getSeconds().pad(2)}`;
-
-        writeString([
-            `${this.D2Client.gameJoinTime}`,
-            `${time}`,
-            `${timestr}`,
-            `${gameInfo?.Name}`,
-            `${this.D2Client.GetLevelNameFromLevelNo(this.D2Common.getCurrentLevelNo())}`,
-            `${itemIndex},${D2ItemQualityCN[quality]},${name}`,
-        ].join(','));
-
-        API.crt.fclose(fp);
+    installModules() {
+        // import('./bot_kc').then((m) => { new m.BotAutoKC().install(); });
+        import('./bot_kc_v2').then((m) => { new m.BotAutoKC().install(); }).catch((reason) => { utils.log(reason); });
     }
 
     getItemMaphackID(item: d2types.Unit): number {
@@ -751,64 +453,40 @@ export function main(addrs: ID2Addrs) {
     D2Game.getInstance().init(addrs);
 }
 
+async function start(times: number, cb: any) {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const test = async () => {
+        throw new Error('wtf');
+    };
+
+    D2Game.D2Client.scheduleOnMainThread(function() {
+        cb('fuck1');
+    });
+
+    cb('done1');
+
+    await D2Game.D2Client.scheduleOnMainThreadAsync(function() {
+        cb('fuck2');
+    });
+
+    await test();
+
+    cb('done2');
+
+    for (let i = 0; i != times; i++) {
+        cb('Hello');
+        await wait(100);
+        cb('And Welcome');
+        await wait(100);
+        cb(`<${i}> To Async Await Using TypeScript\n--------------\n`);
+        await wait(200);
+    }
+}
+
 rpc.exports = function() {
     return {
         test() {
-            D2Game.D2Client.scheduleOnMainThread(() => {
-                const pos = D2Game.D2Client.getPlayerPosition();
-                return D2Game.D2Common.findNearbyUnits(D2Game.D2Client.GetPlayerUnit(), 20, (unit: d2types.Unit, source: d2types.Unit, room1: d2types.Room1) => {
-                    if (unit.Type != D2UnitType.Item)
-                        return false;
-
-                    const d = Math.floor(D2Game.D2Common.getUnitDistanceByPoints(pos, D2Game.D2Common.getUnitPosition(unit)));
-                    utils.log(`<${unit}> type: ${unit.Type} name: ${D2Game.D2Client.GetUnitName(unit)} d: ${d}`);
-
-                    return false;
-                });
-
-                const unit = D2Game.D2Common.findRoomTileByLevelNo(30, 8);
-                if (!unit) {
-                    utils.log('tile not found');
-                    return;
-                }
-
-                utils.log(`${unit}`);
-                D2Game.D2Client.interactWithEntity(unit!.Type, unit!.ID);
-
-                return;
-
-                const room1 = D2Game.D2Common.GetRoomFromUnit(D2Game.D2Client.GetPlayerUnit());
-                const rooms = D2Game.D2Common.GetNearbyRooms(room1);
-
-                utils.log(`room1: ${room1}`);
-
-                const lines = [''];
-
-                for (let r of rooms) {
-                    const lvlno = D2Game.D2Common.GetLevelNoFromRoom(r);
-                    let unit = r.FirstUnit;
-                    const room2 = r.Room2;
-
-                    if (unit.isNull())
-                        continue;
-
-                    lines.push(`  room1: ${r} room2: ${room2} tiles: ${room2.RoomTiles}`);
-
-                    while (!unit.isNull()) {
-                        const pos = D2Game.D2Common.getUnitPosition(unit);
-                        const playerPos = D2Game.D2Client.getPlayerPosition();
-                        const distance = D2Game.D2Common.getUnitDistanceByPoints(pos, playerPos);
-                        lines.push(`    unit: ${unit} lvlno: ${lvlno} first_unit<${unit.Type}>: ${unit} pos: ${pos} @ ${Math.floor(distance)} name:${D2Game.D2Client.GetUnitName(unit)}`);
-
-                        unit = unit.NextRoomUnit;
-                    }
-
-                    lines.push('');
-                }
-
-                lines.push('');
-                utils.log(lines.join('\n'));
-            });
+            start(5, (text: string) => utils.log(text));
         },
 
         showInfo: function() {
@@ -827,18 +505,18 @@ rpc.exports = function() {
         },
 
         printItemNameFromTxtFileNo(txtFileno: number) {
-            const bin   = D2Game.D2Common.GetItemsBIN(txtFileno);
+            const bin   = D2Game.D2Common.GetItemsBin(txtFileno);
             const name  = D2Game.D2Lang.GetStringFromIndex(bin.NameStrIndex);
 
             utils.log(name);
         },
 
-        enumUnits(range: number = 5) {
+        enumUnits(range = 5) {
             D2Game.D2Client.scheduleOnMainThread(function() {
                 const player = D2Game.D2Client.GetPlayerUnit();
                 const pos = D2Game.D2Common.getUnitPosition(player);
                 D2Game.D2Common.FindNearestUnitFromPos(player, pos.x, pos.y, range, new NativeCallback(
-                    (target: NativePointer, source: NativePointer): number => {
+                    (target: NativePointer): number => {
                         const unit = new d2types.Unit(target);
 
                         if (unit.Type == D2UnitType.Player)

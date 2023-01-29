@@ -42,7 +42,7 @@ export interface ID2Addrs {
         GetLevelNoFromRoom      : NativeFunction<number, [NativePointer]>;
 
         CheckItemType           : NativeFunction<number, [NativePointer, number]>;
-        GetItemsBIN             : NativeFunction<NativePointer, [number]>;
+        GetItemsBin             : NativeFunction<NativePointer, [number]>;
         GetItemQuality          : NativeFunction<number, [NativePointer]>;
         GetUnitPosition         : NativeFunction<void, [NativePointer, NativePointer]>;
         GetUnitDistanceToPos    : NativeFunction<number, [NativePointer, number, number]>;
@@ -97,11 +97,11 @@ export class D2Base {
 }
 
 export class D2Net extends D2Base {
-    delaySend       : boolean = false;
+    delaySend       = false;
     sendPending     : ArrayBuffer2[] = [];
     sendCallbacks   : ((packetId: D2ClientCmd, payload: ArrayBuffer2) => void)[] = [];
     recvCallbacks   : ((packetId: D2GSCmd, payload: ArrayBuffer2) => void)[] = [];
-    mainThreadId    : number = 0;
+    mainThreadId    = 0;
 
     hook() {
         this.mainThreadId = Process.enumerateThreads()[0].id;
@@ -222,7 +222,7 @@ export class D2Net extends D2Base {
 
         if (this.sendCallbacks.length != 0) {
             const payload = utils.ptrToBytes(buf, size);
-            for (let cb of this.sendCallbacks) {
+            for (const cb of this.sendCallbacks) {
                 cb(packetId, payload)
             }
         }
@@ -564,7 +564,7 @@ export class D2Net extends D2Base {
 
             default:
             {
-                const buf2 = buf.readByteArray(size);
+                // const buf2 = buf.readByteArray(size);
                 if (utils.Logging) {
                     log(` unknown = ${arg2.hex()}, size = ${size}`);
                 }
@@ -609,7 +609,7 @@ export class D2Net extends D2Base {
                 break;
         }
 
-        for (let cb of this.recvCallbacks) {
+        for (const cb of this.recvCallbacks) {
             cb(packetId, payload);
         }
     }
@@ -699,7 +699,7 @@ export class D2Net extends D2Base {
 
             const sendPending = this.sendPending.splice(0);
 
-            for (let p of sendPending) {
+            for (const p of sendPending) {
                 this.SendPacket(p);
             }
         });
@@ -707,17 +707,17 @@ export class D2Net extends D2Base {
 }
 
 export class D2Client extends D2Base {
-    gameLoaded          : boolean                   = false;
-    gameJoinTime        : number                    = 0;
-    leftSkill           : number                    = 0;
-    rightSkill          : number                    = 0;
-    activeStates        : number[]                  = [];
-    levelNo             : number                    = 0;
-    playerLocation      : d2types.Position          = d2types.Position.default();
-    gameWindow          : NativePointer             = NULL;
-    gameWindowProc      : NativeFunction<NativePointer, [NativePointer, number, NativePointer, NativePointer]> = new NativeFunction(NULL, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer']);
+    gameLoaded                          = false;
+    gameJoinTime                        = 0;
+    leftSkill                           = 0;
+    rightSkill                          = 0;
+    activeStates: number[]              = [];
+    levelNo                             = 0;
+    playerLocation: d2types.Position    = d2types.Position.default();
+    gameWindow: NativePointer           = NULL;
+    gameWindowProc: NativeFunction<NativePointer, [NativePointer, number, NativePointer, NativePointer]> = new NativeFunction(NULL, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer']);
 
-    mainThreadId        : number    = 0;
+    mainThreadId = 0;
     mainThreadCallbacks : (() => void)[] = [];
     idleLoopCallbacks   : (() => void)[] = [];
     keyDownCallbacks    : ((vk: number) => void)[] = [];
@@ -745,7 +745,7 @@ export class D2Client extends D2Base {
                     this.gameWindow = hWnd;
 
                     const wndclassA = Memory.alloc(0x28);
-                    const ok = API.USER32.GetClassInfoA(Modules.Game.base, utils.UTF8('Diablo II'), wndclassA);
+                    API.USER32.GetClassInfoA(Modules.Game.base, utils.UTF8('Diablo II'), wndclassA);
                     const wndproc = wndclassA.add(4).readPointer();
 
                     if (wndproc.isNull()) {
@@ -860,7 +860,7 @@ export class D2Client extends D2Base {
 
     // helper
 
-    onMapReveal(map: D2GSPacket.MapReveal) {
+    onMapReveal() {
         this.levelNo = D2Game.D2Common.getCurrentLevelNo();
     }
 
@@ -914,6 +914,14 @@ export class D2Client extends D2Base {
         }
     }
 
+    async scheduleOnMainThreadAsync<T>(fn: () => T): Promise<T> {
+        return new Promise((resolve) => {
+            this.scheduleOnMainThread(function() {
+                resolve(fn());
+            });
+        });
+    }
+
     onIdleLoop(fn: () => void) {
         this.idleLoopCallbacks.push(fn);
     }
@@ -923,7 +931,7 @@ export class D2Client extends D2Base {
     }
 
     idleLoop() {
-        for (let cb of this.idleLoopCallbacks) {
+        for (const cb of this.idleLoopCallbacks) {
             cb();
         }
 
@@ -932,7 +940,7 @@ export class D2Client extends D2Base {
         if (queue.length == 0)
             return;
 
-        for (let fn of queue) {
+        for (const fn of queue) {
             fn();
         }
     }
@@ -949,7 +957,7 @@ export class D2Client extends D2Base {
                 const previousKeyState = msg.add(0xC).readU32() & 0x40000000;
 
                 if (previousKeyState == 0) {
-                    for (let cb of this.keyDownCallbacks)
+                    for (const cb of this.keyDownCallbacks)
                         cb(vk);
                 }
 
@@ -1062,9 +1070,9 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
-    castSkill(skillId: number, lefthand: boolean = false, pos?: d2types.Position) {
+    castSkill(skillId: number, lefthand = false, pos?: d2types.Position) {
         if (!pos)
-            pos = D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
+            pos = D2Game.D2Client.getPlayerPosition();
 
         D2Game.D2Client.selectSkill(lefthand, skillId);
         D2Game.D2Client.rightSkillOnLocation(pos.x, pos.y);
@@ -1092,7 +1100,7 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
-    entityAction(unitType: number, unitId: number, complement: number = 0) {
+    entityAction(unitType: number, unitId: number, complement = 0) {
         const SIZE = 0xD;
         const payload = Memory.alloc(SIZE);
 
@@ -1104,7 +1112,7 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
-    repair(npcUnitId: number, itemUnitId: number = 0) {
+    repair(npcUnitId: number, itemUnitId = 0) {
         const SIZE = 0x11;
         const payload = Memory.alloc(SIZE);
         const repairOne = itemUnitId == 0 ? 0 : 1;
@@ -1193,8 +1201,8 @@ export class D2Common extends D2Base {
         return new d2types.ItemTable(this.addrs.D2Common.ItemTable);
     }
 
-    GetItemsBIN(itemId: number): d2types.ItemsBin {
-        return new d2types.ItemsBin(this.addrs.D2Common.GetItemsBIN(itemId));
+    GetItemsBin(itemId: number): d2types.ItemsBin {
+        return new d2types.ItemsBin(this.addrs.D2Common.GetItemsBin(itemId));
     }
 
     GetItemQuality(item: NativePointer): D2ItemQuality {
@@ -1242,7 +1250,7 @@ export class D2Common extends D2Base {
         return this.addrs.D2Common.GetUnitDistanceToPos(unit, x, y)
     }
 
-    GetUnitStat(unit: NativePointer, statId: number, index: number = 0): number {
+    GetUnitStat(unit: NativePointer, statId: number, index = 0): number {
         return this.addrs.D2Common.GetUnitStat(unit, statId, index);
     }
 
@@ -1312,7 +1320,7 @@ export class D2Common extends D2Base {
     }
 
     enumInventoryItems(cb: (item: d2types.Unit) => boolean) {
-        D2Game.D2Client.scheduleOnMainThread(() => {
+        // D2Game.D2Client.scheduleOnMainThread(() => {
             const player = D2Game.D2Client.GetPlayerUnit();
             const inventory = player.Inventory;
 
@@ -1323,7 +1331,7 @@ export class D2Common extends D2Base {
                 if (cb(item))
                     break;
             }
-        });
+        // });
     }
 
     findNearbyUnits(source: d2types.Unit, range: number, cb: (unit: d2types.Unit, source: d2types.Unit, room1: d2types.Room1) => boolean): d2types.Unit | null {
@@ -1334,7 +1342,7 @@ export class D2Common extends D2Base {
         let targetUnit = null;
         let lastDistance = 10000;
 
-        for (let room of nearbyRooms) {
+        for (const room of nearbyRooms) {
             for (let unit = room.FirstUnit; !unit.isNull(); unit = unit.NextRoomUnit) {
                 const pos = this.getUnitPosition(unit);
                 const distance = this.getUnitDistanceByPoints(pos, sourcePos);

@@ -39,7 +39,7 @@ export const Addrs = {
         GetLevelNoFromRoom      : new NativeFunction(Modules.Game.base.add(0x21A1B0), 'uint32', ['pointer'], 'stdcall'),
 
         CheckItemType           : new NativeFunction(Modules.Game.base.add(0x229BB0), 'uint32', ['pointer', 'uint32'], 'stdcall'),
-        GetItemsBIN             : new NativeFunction(Modules.Game.base.add(0x2335F0), 'pointer', ['uint32'], 'stdcall'),
+        GetItemsBin             : new NativeFunction(Modules.Game.base.add(0x2335F0), 'pointer', ['uint32'], 'stdcall'),
         GetItemQuality          : new NativeFunction(Modules.Game.base.add(0x227E70), 'uint32', ['pointer'], 'stdcall'),
         GetCursorItem           : new NativeFunction(Modules.Game.base.add(0x23C1E0), 'pointer', ['pointer'], 'stdcall'),
         GetItemCode             : new NativeFunction(Modules.Game.base.add(0x228590), 'uint32', ['pointer'], 'stdcall'),
@@ -49,6 +49,14 @@ export const Addrs = {
         GetUnitStat             : new NativeFunction(Modules.Game.base.add(0x225480), 'uint32', ['pointer', 'uint32', 'uint32'], 'stdcall'),
         GetUnitStatByFlags      : new NativeFunction(Modules.Game.base.add(0x225760), 'pointer', ['pointer', 'uint32'], 'stdcall'),
         GetUnitDistance         : new NativeFunction(Modules.Game.base.add(0x2417F0), 'uint32', ['pointer', 'uint32', 'uint32'], 'stdcall'),
+
+        Room: {
+            GetNearbyRooms      : new NativeFunction(Modules.Game.base.add(0x219790), 'void', ['pointer', 'pointer', 'pointer'], 'stdcall'),
+        },
+
+        Level: {
+            GetLevelsBin        : new NativeFunction(Modules.Game.base.add(0x21DB70), 'pointer', ['uint32'], 'stdcall'),
+        },
 
         Inventory: {
             GetItemLocation     : new NativeFunction(Modules.Game.base.add(0x228250), 'uint8', ['pointer'], 'stdcall'),
