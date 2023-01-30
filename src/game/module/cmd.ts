@@ -1,6 +1,7 @@
 import * as d2types from '../d2types';
 import * as utils from '../../utils';
 import * as json5 from 'json5';
+import { API } from '../../modules';
 import { D2Game } from '../game';
 import { D2ItemLocation, D2UnitItemMode } from '../types';
 
@@ -28,6 +29,16 @@ interface ICommands {
 
 export function install() {
     D2Game.D2Client.registerCommand('drop', new DropCmdHandler());
+
+    const VK_ESC = API.VirtualKeyCode.VK_ESCAPE;
+    D2Game.D2Client.onKeyDown(function(vk: number) {
+        switch (vk) {
+            case VK_ESC:
+                CmdHandler._canceled = true;
+                D2Game.D2Client.PrintGameString('cmd canceled');
+                break;
+        }
+    });
 }
 
 class CmdHandler {
@@ -53,6 +64,16 @@ class CmdHandler {
         // utils.log(JSON.stringify(cfg, undefined, '  '));
 
         return cfg;
+    }
+
+    async handleCommand(args: string[]) {
+        this.canceled = false;
+        return this.onCommand(args);
+    }
+
+    async onCommand(args: string[]) {
+        throw new Error('not implemented');
+        return false;
     }
 
     async runOnMainThread<T>(fn: () => T): Promise<T> {
@@ -113,7 +134,7 @@ class DropCmdHandler extends CmdHandler {
         return await this.runOnMainThread(() => D2Game.D2Common.GetCursorItem(D2Game.D2Client.GetPlayerUnit().Inventory));
     }
 
-    async handleCommand(args: string[]) {
+    async onCommand(args: string[]) {
         if (args.length == 1)
             args.push('0');
 
