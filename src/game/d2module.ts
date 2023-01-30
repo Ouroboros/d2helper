@@ -1,9 +1,9 @@
-import * as utils from '../utils.js';
-import * as d2types from './d2types.js';
-import { API, Modules } from '../modules.js';
-import { ArrayBuffer2, Interceptor2 } from '../utils.js';
-import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types.js';
-import { D2Game } from './game.js';
+import * as utils from '../utils';
+import * as d2types from './d2types';
+import { API, Modules } from '../modules';
+import { ArrayBuffer2, Interceptor2 } from '../utils';
+import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types';
+import { D2Game } from './game';
 
 export interface ID2Addrs {
     D2Net: {
@@ -16,6 +16,8 @@ export interface ID2Addrs {
         MouseY                  : NativePointer;
         GameInfo                : NativePointer;
         ClientState             : NativePointer;
+
+        HandleCommand           : NativeFunction<number, [NativePointer, NativePointer, number]>;
 
         LeaveGame               : NativeFunction<void, [number, NativePointer]>;
 
@@ -706,7 +708,12 @@ export class D2Net extends D2Base {
     }
 }
 
+interface ICommandHandler {
+    handleCommand(args: string[]): Promise<boolean>;
+}
+
 export class D2Client extends D2Base {
+    commandRunning                      = false;
     gameLoaded                          = false;
     gameJoinTime                        = 0;
     leftSkill                           = 0;
@@ -721,6 +728,7 @@ export class D2Client extends D2Base {
     mainThreadCallbacks : (() => void)[] = [];
     idleLoopCallbacks   : (() => void)[] = [];
     keyDownCallbacks    : ((vk: number) => void)[] = [];
+    commandHandler      : {[cmd: string]: ICommandHandler} = {};
 
     hook() {
         this.mainThreadId = Process.enumerateThreads()[0].id;
@@ -786,6 +794,15 @@ export class D2Client extends D2Base {
                 this.messageLoop(msg);
             },
             'void', ['pointer'], 'stdcall',
+        );
+
+        const HandleCommand = Interceptor2.jmp(
+            this.addrs.D2Client.HandleCommand,
+            (cmdW: NativePointer, cmdA: NativePointer, arg3: number): number => {
+                this.handleCommand(cmdW);
+                return HandleCommand(cmdW, cmdA, arg3);
+            },
+            'uint32', ['pointer', 'pointer', 'uint32'], 'thiscall',
         );
     }
 
@@ -960,11 +977,42 @@ export class D2Client extends D2Base {
                         cb(vk);
                 }
 
-                // utils.log(`vk = ${vk}, re = ${previousKeyState.hex()}`);
-
                 break;
             }
         }
+    }
+
+    registerCommand(cmd: string, handler: ICommandHandler) {
+        this.commandHandler[cmd] = handler;
+    }
+
+    handleCommand(cmdW: NativePointer): boolean {
+        if (this.commandRunning)
+            return false;
+
+        const cmdline = cmdW.readUtf16String()!;
+
+        if (cmdline[0] != '.')
+            return false;
+
+        const args = cmdline.slice(1).split(' ').filter(s => s.length);
+        const handler = this.commandHandler[args[0]]
+
+        utils.log(`argv: ${args}`);
+        if (!handler)
+            return false;
+
+        this.commandRunning = true;
+
+        handler.handleCommand(args.slice(1)).then(() => {
+            this.commandRunning = false;
+
+        }).catch(reason => {
+            this.commandRunning = false;
+            utils.log(reason);
+        });
+
+        return true;
     }
 
     hasState(state: number): boolean {
@@ -1167,6 +1215,16 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
+    pickupBufferItem(unitId: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.PICKUPBUFFERITEM)
+        payload.add(1).writeU32(unitId);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
     dropItem(unitId: number) {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
@@ -1322,10 +1380,12 @@ export class D2Common extends D2Base {
         return this.GetLevelNoFromRoom(room);
     }
 
-    enumInventoryItems(cb: (item: d2types.Unit) => boolean) {
+    enumInventoryItems(cb: (item: d2types.Unit) => boolean, inventory?: NativePointer) {
         // D2Game.D2Client.scheduleOnMainThread(() => {
-            const player = D2Game.D2Client.GetPlayerUnit();
-            const inventory = player.Inventory;
+
+            if (!inventory) {
+                inventory = D2Game.D2Client.GetPlayerUnit().Inventory;
+            }
 
             for (let item = this.InventoryGetFirstItem(inventory); !item.isNull(); item = this.InventoryGetNextItem(item)) {
                 if (item.Type != D2UnitType.Item)

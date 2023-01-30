@@ -1,5 +1,5 @@
 // import { sprintf, vsprintf } from "sprintf-js";
-import { API } from "./modules.js";
+import { API } from './modules';
 
 export const Logging = !false;
 
@@ -124,7 +124,7 @@ export function getCurrentTimestamp(): number {
     return getCurrentTime().getTime();
 }
 
-export function log(s: string): void {
+export function log(s: any): void {
     if (!Logging)
         return;
 
@@ -197,7 +197,7 @@ export function readFileContent(path: string): ArrayBuffer2 | null {
 
     const p = Memory.alloc(fileSize);
 
-    const bytesRead = API.crt.fread(p, fileSize, 1, fp);
+    API.crt.fread(p, fileSize, 1, fp);
 
     API.crt.fclose(fp);
 
@@ -207,4 +207,8 @@ export function readFileContent(path: string): ArrayBuffer2 | null {
 export function isPathExists(path: string): boolean {
     const INVALID_FILE_ATTRIBUTES = 0xFFFFFFFF;
     return API.WIN32.GetFileAttributesA(Memory.allocAnsiString(path)) != INVALID_FILE_ATTRIBUTES;
+}
+
+export async function delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }

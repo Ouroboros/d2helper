@@ -1,14 +1,13 @@
-import * as utils from '../utils.js';
-import * as types from './types.js';
-import * as d2types from './d2types.js';
-import { API } from '../modules.js';
-import { ArrayBuffer2, Interceptor2 } from '../utils.js';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType } from './types.js';
-import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module.js';
-import { D2DuckPatch } from './patch/D2Duck.js';
-import { InternalPatch } from './patch/internal.js';
-// import { BotAutoKC } from './bot_kc.js';
-import { BotAutoKC } from './bot_kc_v2.js';
+import * as utils from '../utils';
+import * as types from './types';
+import * as d2types from './d2types';
+import { API } from '../modules';
+import { ArrayBuffer2, Interceptor2 } from '../utils';
+import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType } from './types';
+import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module';
+import { D2DuckPatch } from './patch/D2Duck';
+import { InternalPatch } from './patch/internal';
+import * as moduleloader from './module/loader';
 
 class HurricaneMonitor {
     _active         = false;
@@ -319,8 +318,6 @@ export class D2Game {
         if (D2Game._instance) {
             throw new Error('ERROR');
         }
-
-        D2Game._instance = this;
     }
 
     static getInstance() {
@@ -409,7 +406,7 @@ export class D2Game {
         this.D2Net.onRecv(this.monitor.onReceivePacket.bind(this.monitor));
         this.D2Net.onSend(this.monitor.onSendPacket.bind(this.monitor));
 
-        this.installModules();
+        this.loadModules();
     }
 
     hook() {
@@ -426,8 +423,8 @@ export class D2Game {
         new InternalPatch().install();
     }
 
-    installModules() {
-        new BotAutoKC().install();
+    loadModules() {
+        moduleloader.loadModules();
     }
 
     getItemMaphackID(item: d2types.Unit): number {

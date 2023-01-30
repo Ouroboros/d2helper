@@ -1,41 +1,30 @@
-import * as utils from '../../utils.js';
-import * as types from '../types.js';
-import * as d2types from '../d2types.js';
-import { API } from '../../modules.js';
-import { Interceptor2 } from '../../utils.js';
-import { D2Game } from '../game.js';
-import { D2UnitType, D2ItemQualityCN } from '../types.js';
+import * as utils from '../../utils';
+import * as types from '../types';
+import * as d2types from '../d2types';
+import { API } from '../../modules';
+import { Interceptor2 } from '../../utils';
+import { D2Game } from '../game';
+import { D2UnitType, D2ItemQualityCN } from '../types';
 
 export interface ID2Duck {
     AutoPick: {
-        PrintHint           : NativePointer;
-        // PickupItem          : NativePointer;
-        // OnItemPickedUp      : NativePointer;
-        // PutItemToCube       : NativePointer;
-        // PutItemToCubeCehck1 : NativePointer;
-
-        // CallFindNearest     : NativePointer;
-
-        GetPickupType       : NativeFunction<number, [NativePointer]>;
+        PrintHint                       : NativePointer;
+        GetPickupMethod                 : NativeFunction<number, [NativePointer]>;
     }
 
     MagicBag: {
-        GetCertainBagWhichStoreItem : NativeFunction<NativePointer, [NativePointer, NativePointer, NativePointer, NativePointer]>;
+        GetCertainBagWhichStoreItem     : NativeFunction<NativePointer, [NativePointer, NativePointer, NativePointer, NativePointer]>;
     }
 
     Hackmap: {
-        GetUnitHiddenType           : NativeFunction<number, [NativePointer]>;
-        QuickNextGame               : NativeFunction<void, [number]>;
+        GetUnitHiddenType               : NativeFunction<number, [NativePointer]>;
+        QuickNextGame                   : NativeFunction<void, [number]>;
     }
 
     ItemText: {
-        FormatItemProperties        : NativeFunction<void, [NativePointer, NativePointer, number, number, number]>;
-        Mode3CallFormatItemProperties: NativePointer;
+        FormatItemProperties            : NativeFunction<void, [NativePointer, NativePointer, number, number, number]>;
+        Mode3CallFormatItemProperties   : NativePointer;
     }
-
-    // FunctionPointer: {
-    //     D2Common_FindNearestUnitFromPos : NativePointer;
-    // }
 }
 
 export class D2DuckPatch {
@@ -92,7 +81,7 @@ export class D2DuckPatch {
                 D2DuckPatch.cachedDuck = {
                     AutoPick: {
                         PrintHint                   : d2duck.base.add(0xF5171A0 - 0xF4F0000),
-                        GetPickupType               : new NativeFunction(d2duck.base.add(0xF517140 - 0xF4F0000), 'uint8', ['pointer'], 'mscdecl'),
+                        GetPickupMethod             : new NativeFunction(d2duck.base.add(0xF517140 - 0xF4F0000), 'uint8', ['pointer'], 'mscdecl'),
                     },
 
                     MagicBag: {

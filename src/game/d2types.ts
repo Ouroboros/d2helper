@@ -210,12 +210,12 @@ export class Path extends NativePointer {
         return this.add(0x2).readU16();
     }
 
-    get Y(): number {
-        return this.add(0x6).readU16();
-    }
-
     set X(x: number) {
         this.add(2).writeU16(x);
+    }
+
+    get Y(): number {
+        return this.add(0x6).readU16();
     }
 
     set Y(y: number) {

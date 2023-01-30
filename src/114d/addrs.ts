@@ -1,4 +1,4 @@
-import { Modules } from "../modules.js";
+import { Modules } from '../modules';
 
 export const Addrs = {
     D2Net: {
@@ -11,6 +11,8 @@ export const Addrs = {
         MouseY                  : Modules.Game.base.add(0x3A6AB0),
         GameInfo                : Modules.Game.base.add(0x3A0438),
         ClientState             : Modules.Game.base.add(0x37BBE4),
+
+        HandleCommand           : new NativeFunction(Modules.Game.base.add(0x07C420), 'uint32', ['pointer', 'pointer', 'uint32'], 'thiscall'),
 
         LeaveGame               : new NativeFunction(Modules.Game.base.add(0x07F2D0), 'void', ['uint32', 'pointer'], 'fastcall'),
 
