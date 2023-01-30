@@ -3,12 +3,12 @@ import * as types from './types.js';
 import * as d2types from './d2types.js';
 import { API } from '../modules.js';
 import { ArrayBuffer2, Interceptor2 } from '../utils.js';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType, D2ItemQualityCN } from './types.js';
+import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType } from './types.js';
 import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module.js';
 import { D2DuckPatch } from './patch/D2Duck.js';
 import { InternalPatch } from './patch/internal.js';
-import { BotAutoKC } from './bot_kc.js';
-import { BotAutoKC as BotAutoKCV2 } from './bot_kc_v2.js';
+// import { BotAutoKC } from './bot_kc.js';
+import { BotAutoKC } from './bot_kc_v2.js';
 
 class HurricaneMonitor {
     _active         = false;
@@ -427,8 +427,7 @@ export class D2Game {
     }
 
     installModules() {
-        // new BotAutoKC().install();
-        new BotAutoKCV2().install();
+        new BotAutoKC().install();
     }
 
     getItemMaphackID(item: d2types.Unit): number {
@@ -456,40 +455,9 @@ export function main(addrs: ID2Addrs) {
     D2Game.getInstance().init(addrs);
 }
 
-async function start(times: number, cb: any) {
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-    const test = async () => {
-        throw new Error('wtf');
-    };
-
-    D2Game.D2Client.scheduleOnMainThread(function() {
-        cb('fuck1');
-    });
-
-    cb('done1');
-
-    await D2Game.D2Client.scheduleOnMainThreadAsync(function() {
-        cb('fuck2');
-    });
-
-    await test();
-
-    cb('done2');
-
-    for (let i = 0; i != times; i++) {
-        cb('Hello');
-        await wait(100);
-        cb('And Welcome');
-        await wait(100);
-        cb(`<${i}> To Async Await Using TypeScript\n--------------\n`);
-        await wait(200);
-    }
-}
-
 rpc.exports = function() {
     return {
         test() {
-            start(5, (text: string) => utils.log(text));
         },
 
         showInfo: function() {

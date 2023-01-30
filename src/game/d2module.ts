@@ -936,7 +936,6 @@ export class D2Client extends D2Base {
         }
 
         const queue = this.mainThreadCallbacks.splice(0);
-
         if (queue.length == 0)
             return;
 
@@ -1179,7 +1178,7 @@ export class D2Client extends D2Base {
     }
 
     joinGame() {
-        this.mainThreadCallbacks = [];
+        // this.mainThreadCallbacks = [];
         this.gameLoaded = true;
         this.gameJoinTime = utils.getCurrentTimestamp();
     }
@@ -1192,7 +1191,7 @@ export class D2Client extends D2Base {
         this.activeStates           = [];
         this.levelNo                 = 0;
         this.playerLocation         = d2types.Position.default();
-        this.mainThreadCallbacks    = [];
+        // this.mainThreadCallbacks    = [];
     }
 
     getPlayerPosition() {

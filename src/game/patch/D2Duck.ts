@@ -224,28 +224,28 @@ export class D2DuckPatch {
         API.crt.fclose(fp);
     }
 
-    fixAutoPick(duck: ID2Duck) {
-        // Interceptor2.call(
-        //     duck.AutoPick.PutItemToCubeCehck1,
-        //     () => {
-        //         const ret = this.addrs!.D2Client.sub_486D10();
+    // fixAutoPick(duck: ID2Duck) {
+    //     Interceptor2.call(
+    //         duck.AutoPick.PutItemToCubeCehck1,
+    //         () => {
+    //             const ret = this.addrs!.D2Client.sub_486D10();
 
-        //         if (ret == 0 || ret == 1)
-        //             return 1;
+    //             if (ret == 0 || ret == 1)
+    //                 return 1;
 
-        //         if (this.addrs!.D2Client.sub_44DB30()) {
-        //             this.addrs!.D2Client.CancelTrade();
-        //             return 0;
-        //         }
+    //             if (this.addrs!.D2Client.sub_44DB30()) {
+    //                 this.addrs!.D2Client.CancelTrade();
+    //                 return 0;
+    //             }
 
-        //         return 1;
-        //     },
-        //     'uint32', [],
-        //     'stdcall',
-        // );
+    //             return 1;
+    //         },
+    //         'uint32', [],
+    //         'stdcall',
+    //     );
 
-        return;
-    }
+    //     return;
+    // }
 
     redirectHackmapCfg() {
         const fopen = Interceptor2.jmp(

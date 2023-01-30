@@ -6,13 +6,16 @@
   "main": "src/main.ts",
   "scripts": {
     "prepare": "npm run build",
-    "build": "frida-compile src/main.ts -o Game.js -S",
+    "build": "frida-compile src/main.ts -o Game.js -c -S",
     "watch": "frida-compile src/main.ts -o \"D:\\Game\\Diablo II 暗月\\Game.js\" -w",
     "postbuild": ""
   },
   "devDependencies": {
     "@types/frida-gum": "^18.3.1",
     "@types/node": "^18.11.18",
+    "@typescript-eslint/eslint-plugin": "^5.49.0",
+    "@typescript-eslint/parser": "^5.49.0",
+    "eslint": "^8.33.0",
     "frida-compile": "^16.1.5"
   },
   "dependencies": {
