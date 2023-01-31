@@ -17,7 +17,7 @@ export interface ID2Duck {
     }
 
     Hackmap: {
-        GetUnitHiddenType               : NativeFunction<number, [NativePointer]>;
+        // GetUnitHiddenType               : NativeFunction<number, [NativePointer]>;
         QuickNextGame                   : NativeFunction<void, [number]>;
     }
 
@@ -89,7 +89,7 @@ export class D2DuckPatch {
                     },
 
                     Hackmap: {
-                        GetUnitHiddenType           : new NativeFunction(d2duck.base.add(0xF50F040 - 0xF4F0000), 'uint8', ['pointer'], 'fastcall'),
+                        // GetUnitHiddenType           : new NativeFunction(d2duck.base.add(0xF50F040 - 0xF4F0000), 'uint8', ['pointer'], 'fastcall'),
                         QuickNextGame               : new NativeFunction(d2duck.base.add(0xF512780 - 0xF4F0000), 'void', ['int32'], 'mscdecl'),
                     },
 

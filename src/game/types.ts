@@ -240,6 +240,7 @@ export enum D2SkillID {
     Dru_Werewolf                = 223,      // dru-变狼
     Dru_OakSage                 = 226,      // dru-橡木智者
     Dru_Hurricane               = 250,      // dru-暴风
+    MagicShield                 = 494,      // 魔法护盾
     UnskilledTeleport           = 581,      // 闪现
     CreateCowPortal             = 582,      // 开牛门
     Dru_Boost                   = 615,      // dru-爆气
@@ -258,8 +259,8 @@ export enum D2LevelNo {
     KurastDocks                 = 0x4B,     // 库拉斯特海港
     PandemoniumFortress         = 0x67,     // 群魔堡垒
     Harrogath                   = 0x6D,     // 哈洛加斯
-    Cow1                        = 137,      // 牛一
-    Cow2                        = 151,      // 牛二
+    MooMooFarm1                 = 137,      // 牛一
+    MooMooFarm2                 = 151,      // 牛二
 }
 
 export enum D2UnitType {

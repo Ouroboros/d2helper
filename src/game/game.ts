@@ -454,7 +454,47 @@ export function main(addrs: ID2Addrs) {
 
 rpc.exports = function() {
     return {
-        test() {
+        test2() {
+            Interceptor2.call(
+                ptr(0x04DDC37),
+                function(ptr: NativePointer, val: number, size: number): NativePointer {
+                    const p = ptr;
+                    while (size != 0) {
+                        if (ptr.readU8() != 0)
+                            ptr.writeU8(0);
+
+                        ptr = ptr.add(1);
+                        size--;
+                    }
+
+                    return p;
+                },
+                'pointer', ['pointer', 'uint8', 'uint32'], 'mscdecl',
+            );
+        },
+
+        test(p: NativePointer) {
+            D2Game.D2Client.scheduleOnMainThread(() => {
+                const i = new d2types.Unit(p);
+                // const r = D2Game.D2Client.IsUnitInvisible(D2Game.D2Client.GetPlayerUnit());
+                console.log(i.Flags2.hex());
+                // const walls = D2Game.D2Client.View.Walls;
+                // for (let i = 0; i != walls.length; i++) {
+                //     const w = walls[i];
+                //     for (let floor = w.Floor; !floor.isNull(); floor = floor.Next) {
+                //         if (floor.isNull())
+                //             continue;
+
+                //         if ((floor.Flags & 3) != 0)
+                //             continue
+
+                //         if (floor.Unit.isNull())
+                //             continue;
+
+                //         utils.log(`${w}<${i}>: floor: ${floor} unit: ${floor.Unit} ${D2Game.D2Client.GetUnitName(floor.Unit)}`);
+                //     }
+                // }
+            });
         },
 
         showInfo: function() {

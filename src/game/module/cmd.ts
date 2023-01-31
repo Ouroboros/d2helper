@@ -10,7 +10,6 @@ interface IDropRuleBase {
 }
 
 interface IDropRuleProperty extends IDropRuleBase {
-    exclude : boolean;
     regex   : boolean;
     property: string;
 }
@@ -18,7 +17,8 @@ interface IDropRuleProperty extends IDropRuleBase {
 interface IDropCommand {
     key     : string;
     name    : string;
-    id      : number;
+    id      : number | number[];
+    exclude : boolean;
     quality : number[];
     rules   : IDropRuleBase[];
 }
@@ -61,18 +61,24 @@ class CmdHandler {
         if (!cfg)
             return null;
 
-        // utils.log(JSON.stringify(cfg, undefined, '  '));
-
         return cfg;
     }
 
+    async printGameString(s: string) {
+        return this.runOnMainThread(() => D2Game.D2Client.PrintGameString(s))
+    }
+
     async handleCommand(args: string[]) {
+        await this.printGameString(`cmd start: ${args}`);
         this.canceled = false;
-        return this.onCommand(args);
+        const ret = this.onCommand(args);
+        this.canceled = false;
+        await this.printGameString(`cmd done: ${args}`);
+        return ret;
     }
 
     async onCommand(args: string[]) {
-        throw new Error('not implemented');
+        throw new Error(`not implemented: ${args}`);
         return false;
     }
 
@@ -156,7 +162,13 @@ class DropCmdHandler extends CmdHandler {
         if (count <= 0)
             count = 100000;
 
-        const entries = drop.filter(d => d.key == key);
+        const dropCmds = drop.filter(d => d.key == key).map((cmd) => {
+            if (!Array.isArray(cmd.id))
+                cmd.id = [cmd.id];
+
+            return cmd;
+        });
+
         const items: d2types.Unit[] = [];
 
         await this.runOnMainThread(() => {
@@ -172,14 +184,14 @@ class DropCmdHandler extends CmdHandler {
 
                 const itemId = this.getItemMaphackID(item);
 
-                for (const entry of entries) {
-                    if (entry.id != itemId)
+                for (const entry of dropCmds) {
+                    if ((entry.id as number[]).indexOf(itemId) == -1)
                         continue;
 
                     if (entry.quality.indexOf(D2Game.D2Common.GetItemQuality(item)) == -1)
                         continue;
 
-                    if (!this.matchRules(entry.rules, item)) {
+                    if (this.matchRules(entry.rules, item) && entry.exclude) {
                         continue;
                     }
 
@@ -199,12 +211,23 @@ class DropCmdHandler extends CmdHandler {
             const unitId = i.ID;
 
             await this.runOnMainThread(() => D2Game.D2Client.pickupBufferItem(unitId));
-            while ((await this.getCursorItem()).isNull())
+            while ((await this.getCursorItem()).isNull()) {
+                if (this.canceled)
+                    break;
+
                 await utils.delay(50);
+            }
+
+            if (this.canceled)
+                break;
 
             await this.runOnMainThread(() => D2Game.D2Client.dropItem(unitId));
-            while (!(await this.getCursorItem()).isNull())
+            while (!(await this.getCursorItem()).isNull()) {
+                if (this.canceled)
+                    break;
+
                 await utils.delay(50);
+            }
         }
 
         return true;
@@ -221,12 +244,11 @@ class DropCmdHandler extends CmdHandler {
 
                     if (r.regex) {
                         const re = new RegExp(r.property, 'm');
-                        if (re.test(property) && r.exclude)
-                            return false;
+                        if (re.test(property))
+                            return true;
 
                     } else if (property.indexOf(r.property) != -1) {
-                        if (r.exclude)
-                            return false;
+                        return true;
                     }
 
                     break;
@@ -234,7 +256,7 @@ class DropCmdHandler extends CmdHandler {
             }
         }
 
-        return true;
+        return false;
     }
 
     getItemProperty(item: d2types.Unit): string {

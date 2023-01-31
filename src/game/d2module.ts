@@ -16,6 +16,7 @@ export interface ID2Addrs {
         MouseY                  : NativePointer;
         GameInfo                : NativePointer;
         ClientState             : NativePointer;
+        View                    : NativePointer;
 
         HandleCommand           : NativeFunction<number, [NativePointer, NativePointer, number]>;
 
@@ -30,6 +31,7 @@ export interface ID2Addrs {
         CancelTrade             : NativeFunction<number, []>;
         OnKeyDown               : NativeFunction<void, [NativePointer]>;
         GetUnitName             : NativeFunction<NativePointer, [NativePointer]>;
+        IsUnitVisible         : NativeFunction<number, [NativePointer]>;
 
         // unknown
         sub_486D10              : NativeFunction<number, []>;
@@ -822,6 +824,10 @@ export class D2Client extends D2Base {
         return this.addrs.D2Client.ClientState.readU32();
     }
 
+    get View(): d2types.View {
+        return new d2types.View(this.addrs.D2Client.View.readPointer());
+    }
+
     LeaveGame() {
         if (this.gameWindow.isNull())
             return;
@@ -842,6 +848,29 @@ export class D2Client extends D2Base {
 
     FindServerSideUnit(unitId: number, unitType: D2UnitType): d2types.Unit {
         return new d2types.Unit(this.addrs.D2Client.FindServerSideUnit(unitId, unitType));
+    }
+
+    callIsUnitVisibleCaller?: NativeFunction<number, [NativePointer, NativePointer]>;
+
+    IsUnitVisible(unit: NativePointer): boolean {
+        if (!this.callIsUnitVisibleCaller) {
+            const gum = Memory.alloc(Process.pageSize);
+            Memory.patchCode(gum, 0x100, code => {
+                const w = new X86Writer(code, {pc: gum});
+                w.putPushReg('esi');
+                w.putMovRegReg('esi', 'ecx');
+                w.putCallReg('edx');
+                w.putPopReg('esi');
+                w.putRet();
+                w.flush();
+            });
+
+            this.callIsUnitVisibleCaller = new NativeFunction(gum, 'uint32', ['pointer', 'pointer'], 'fastcall');
+            (this.callIsUnitVisibleCaller as any).gum = gum;
+            utils.log(this.callIsUnitVisibleCaller);
+        }
+
+        return this.callIsUnitVisibleCaller(unit, this.addrs.D2Client.IsUnitVisible) != 0;
     }
 
     GetPlayerUnit(): d2types.Unit {
@@ -987,8 +1016,10 @@ export class D2Client extends D2Base {
     }
 
     handleCommand(cmdW: NativePointer): boolean {
-        if (this.commandRunning)
+        if (this.commandRunning) {
+            utils.log(`commandRunning: ${this.commandRunning}`);
             return false;
+        }
 
         const cmdline = cmdW.readUtf16String()!;
 

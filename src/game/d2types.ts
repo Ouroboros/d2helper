@@ -155,12 +155,24 @@ export class Unit extends NativePointer {
         return this.add(0xB8).readU32();
     }
 
+    get Flags(): number {
+        return this.add(0xC4).readU32();
+    }
+
+    get Flags2(): number {
+        return this.add(0xC8).readU32();
+    }
+
     get NextRoomUnit(): Unit {
         return new Unit(this.add(0xE8).readPointer());
     }
 
     get ItemCodeString(): string {
         return this.ItemCode.hexToString();
+    }
+
+    isVisible() {
+        return (this.Flags2 & 0x80) != 0;
     }
 }
 
@@ -297,5 +309,41 @@ export class Stats extends NativePointer {
 
     get BaseStats(): StatVector {
         return new StatVector(this.add(0x24));
+    }
+}
+
+// .\\GAME\\View.cpp
+export class View extends NativePointer {
+    get Walls(): Wall2[] {
+        const arr = this.add(0xEAA8).readPointer();
+        const count = this.WallCount;
+        const SIZE_OF_WALL2 = 0x24;
+
+        return Array.from(Array(count * count), (_, index) => new Wall2(arr.add(index * SIZE_OF_WALL2)));
+    }
+
+    get WallCount(): number {
+        return this.add(0xEAB0).readU32();
+    }
+}
+
+// .\\GAME\\Wall2.cpp
+export class Wall2 extends NativePointer {
+    get Floor(): Floor {
+        return new Floor(this.add(0x10).readPointer());
+    }
+}
+
+export class Floor extends NativePointer {
+    get Flags() {
+        return this.readU32();
+    }
+
+    get Unit() {
+        return new Unit(this.add(0x0C).readPointer());
+    }
+
+    get Next(): Floor {
+        return new Floor(this.add(0x10).readPointer());
     }
 }

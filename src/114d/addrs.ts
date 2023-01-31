@@ -11,6 +11,7 @@ export const Addrs = {
         MouseY                  : Modules.Game.base.add(0x3A6AB0),
         GameInfo                : Modules.Game.base.add(0x3A0438),
         ClientState             : Modules.Game.base.add(0x37BBE4),
+        View                    : Modules.Game.base.add(0x3A0640),
 
         HandleCommand           : new NativeFunction(Modules.Game.base.add(0x07C420), 'uint32', ['pointer', 'pointer', 'uint32'], 'thiscall'),
 
@@ -25,6 +26,7 @@ export const Addrs = {
         CancelTrade             : new NativeFunction(Modules.Game.base.add(0x0B90B0), 'uint32', [], 'stdcall'),
         OnKeyDown               : new NativeFunction(Modules.Game.base.add(0x06A840), 'void', ['pointer'], 'stdcall'),
         GetUnitName             : new NativeFunction(Modules.Game.base.add(0x064A60), 'pointer', ['pointer'], 'fastcall'),
+        IsUnitVisible           : new NativeFunction(Modules.Game.base.add(0x0DC710), 'uint32', ['pointer'], 'fastcall'),
 
         // unknown
         sub_486D10              : new NativeFunction(Modules.Game.base.add(0x086D10), 'uint32', []),
