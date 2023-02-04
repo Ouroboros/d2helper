@@ -4,6 +4,7 @@ import { API, Modules } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
 import { D2ClientState, D2ClientCmd, D2GSCmd, D2StateID, D2GSPacket, D2LevelNo as D2LevelNo, D2ItemQuality, D2StringColor, D2UnitType } from './types';
 import { D2Game } from './game';
+import { Task, AbortController } from '../task';
 
 export interface ID2Addrs {
     D2Net: {
@@ -711,16 +712,15 @@ export class D2Net extends D2Base {
 }
 
 interface ICommandHandler {
-    handleCommand(args: string[]): Promise<boolean>;
+    handleCommand(args: string[]): boolean;
 }
 
 export class D2Client extends D2Base {
-    commandRunning                      = false;
     gameLoaded                          = false;
     gameJoinTime                        = 0;
     leftSkill                           = 0;
     rightSkill                          = 0;
-    activeStates: number[]              = [];
+    activeStates: Set<number>           = new Set;
     levelNo                             = 0;
     playerLocation: d2types.Position    = d2types.Position.default();
     gameWindow: NativePointer           = NULL;
@@ -960,12 +960,21 @@ export class D2Client extends D2Base {
         }
     }
 
-    async scheduleOnMainThreadAsync<T>(fn: () => T): Promise<T> {
-        return new Promise((resolve) => {
-            this.scheduleOnMainThread(function() {
-                resolve(fn());
+    async scheduleOnMainThreadAsync<T>(fn: () => T, controller?: AbortController): Promise<T> {
+        if (controller) {
+            return new Task(resolve => {
+                this.scheduleOnMainThread(function() {
+                    resolve(fn());
+                });
+            }, controller);
+
+        } else {
+            return new Promise(resolve => {
+                this.scheduleOnMainThread(function() {
+                    resolve(fn());
+                });
             });
-        });
+        }
     }
 
     onIdleLoop(fn: () => void) {
@@ -977,17 +986,8 @@ export class D2Client extends D2Base {
     }
 
     idleLoop() {
-        for (const cb of this.idleLoopCallbacks) {
-            cb();
-        }
-
-        const queue = this.mainThreadCallbacks.splice(0);
-        if (queue.length == 0)
-            return;
-
-        for (const fn of queue) {
-            fn();
-        }
+        this.idleLoopCallbacks.forEach(cb => cb());
+        this.mainThreadCallbacks.splice(0).forEach(fn => fn());
     }
 
     messageLoop(msg: NativePointer) {
@@ -1016,11 +1016,6 @@ export class D2Client extends D2Base {
     }
 
     handleCommand(cmdW: NativePointer): boolean {
-        if (this.commandRunning) {
-            utils.log(`commandRunning: ${this.commandRunning}`);
-            return false;
-        }
-
         const cmdline = cmdW.readUtf16String()!;
 
         if (cmdline[0] != '.')
@@ -1033,36 +1028,19 @@ export class D2Client extends D2Base {
         if (!handler)
             return false;
 
-        this.commandRunning = true;
-
-        handler.handleCommand(args.slice(1)).then(() => {
-            this.commandRunning = false;
-
-        }).catch(reason => {
-            this.commandRunning = false;
-            utils.log(reason);
-        });
-
-        return true;
+        return handler.handleCommand(args.slice(1));
     }
 
     hasState(state: number): boolean {
-        return this.activeStates.indexOf(state) != -1;
+        return this.activeStates.has(state);
     }
 
     addState(state: number) {
-        if (!this.hasState(state))
-            this.activeStates.push(state);
+        this.activeStates.add(state);
     }
 
     removeState(state: number): boolean {
-        const index = this.activeStates.indexOf(state);
-        if (index == -1) {
-            return false;
-        }
-
-        this.activeStates.splice(index, 1);
-        return true;
+        return this.activeStates.delete(state);
     }
 
     runToLocation(x: number, y: number) {
@@ -1277,9 +1255,9 @@ export class D2Client extends D2Base {
         this.gameJoinTime           = 0;
         this.leftSkill              = 0;
         this.rightSkill             = 0;
-        this.activeStates           = [];
         this.levelNo                 = 0;
         this.playerLocation         = d2types.Position.default();
+        this.activeStates.clear();
         // this.mainThreadCallbacks    = [];
     }
 

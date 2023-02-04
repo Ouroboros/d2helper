@@ -270,6 +270,7 @@ export enum D2UnitType {
     Missile                     = 3,
     Item                        = 4,
     RoomTile                    = 5,
+    Released                    = 6,
 }
 
 export enum D2ItemType {

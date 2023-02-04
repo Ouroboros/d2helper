@@ -4,6 +4,7 @@ import * as json5 from 'json5';
 import { API } from '../../modules';
 import { D2Game } from '../game';
 import { D2ItemLocation, D2UnitItemMode } from '../types';
+import { AbortController, Task } from '../../task';
 
 interface IDropRuleBase {
     type: string;
@@ -30,27 +31,20 @@ interface ICommands {
 export function install() {
     D2Game.D2Client.registerCommand('drop', new DropCmdHandler());
 
-    const VK_ESC = API.VirtualKeyCode.VK_ESCAPE;
+    const key = API.VirtualKeyCode.VK_ESCAPE;
     D2Game.D2Client.onKeyDown(function(vk: number) {
         switch (vk) {
-            case VK_ESC:
-                CmdHandler._canceled = true;
-                D2Game.D2Client.PrintGameString('cmd canceled');
+            case key:
+                // D2Game.D2Client.PrintGameString('cmd canceled');
+                CmdHandler.abortCurrentTask();
                 break;
         }
     });
 }
 
 class CmdHandler {
-    static _canceled = false;
-
-    get canceled() {
-        return CmdHandler._canceled;
-    }
-
-    set canceled(b: boolean) {
-        CmdHandler._canceled = b;
-    }
+    static currentTask: Task<boolean> | null = null;
+    private controller = new AbortController;
 
     loadConfig(): ICommands | null {
         const cmds = utils.readFileContent('commands.json5');
@@ -68,13 +62,42 @@ class CmdHandler {
         return this.runOnMainThread(() => D2Game.D2Client.PrintGameString(s))
     }
 
-    async handleCommand(args: string[]) {
-        await this.printGameString(`cmd start: ${args}`);
-        this.canceled = false;
-        const ret = this.onCommand(args);
-        this.canceled = false;
-        await this.printGameString(`cmd done: ${args}`);
-        return ret;
+    static abortCurrentTask() {
+        utils.log(`abortCurrentTask: ${CmdHandler.currentTask}`);
+        CmdHandler.currentTask?.abort();
+        CmdHandler.currentTask = null;
+    }
+
+    handleCommand(args: string[]) {
+        if (CmdHandler.currentTask) {
+            utils.log(`commandRunning`);
+            return false;
+        }
+
+        CmdHandler.currentTask = new Task<boolean>(async (resolve, reject, onAbort) => {
+            try {
+                onAbort(() => {
+                    utils.log('onAbort');
+                    D2Game.D2Client.scheduleOnMainThread(() => D2Game.D2Client.PrintGameString('cmd canceled'));
+                    reject();
+                });
+
+                utils.log(`cmd start: ${args}`);
+                const ret = await this.onCommand(args);
+                utils.log(`cmd done 1: ${args}`);
+                resolve(ret);
+
+            } catch (error: any) {
+                utils.log(`catch: ${error.stack}`);
+                reject(error);
+
+            } finally {
+                utils.log(`cmd done 2: ${args}`);
+                CmdHandler.currentTask = null;
+            }
+        }, this.controller, 'cmd task');
+
+        return true;
     }
 
     async onCommand(args: string[]) {
@@ -82,8 +105,13 @@ class CmdHandler {
         return false;
     }
 
+    async delay(ms: number) {
+        await utils.delay(ms, this.controller);
+        return;
+    }
+
     async runOnMainThread<T>(fn: () => T): Promise<T> {
-        return D2Game.D2Client.scheduleOnMainThreadAsync(fn);
+        return D2Game.D2Client.scheduleOnMainThreadAsync(fn, this.controller);
     }
 
     usage() {
@@ -152,7 +180,7 @@ class DropCmdHandler extends CmdHandler {
         if (!cfg)
             return false;
 
-        const drop = cfg.drop;
+        const drop = cfg!.drop;
         if (drop.length == 0)
             return false;
 
@@ -205,28 +233,16 @@ class DropCmdHandler extends CmdHandler {
         utils.log(`items: ${items.length}`);
 
         for (const i of items) {
-            if (this.canceled)
-                break;
-
             const unitId = i.ID;
 
             await this.runOnMainThread(() => D2Game.D2Client.pickupBufferItem(unitId));
             while ((await this.getCursorItem()).isNull()) {
-                if (this.canceled)
-                    break;
-
-                await utils.delay(50);
+                await this.delay(50);
             }
-
-            if (this.canceled)
-                break;
 
             await this.runOnMainThread(() => D2Game.D2Client.dropItem(unitId));
             while (!(await this.getCursorItem()).isNull()) {
-                if (this.canceled)
-                    break;
-
-                await utils.delay(50);
+                await this.delay(50);
             }
         }
 

@@ -1,5 +1,6 @@
 // import { sprintf, vsprintf } from "sprintf-js";
 import { API } from './modules';
+import { AbortController, Task } from './task';
 
 export const Logging = !false;
 
@@ -209,6 +210,10 @@ export function isPathExists(path: string): boolean {
     return API.WIN32.GetFileAttributesA(Memory.allocAnsiString(path)) != INVALID_FILE_ATTRIBUTES;
 }
 
-export async function delay(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+export async function delay(ms: number, controller?: AbortController) {
+    if (controller) {
+        return new Task(resolve => setTimeout(resolve, ms), controller);
+    } else {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 }
