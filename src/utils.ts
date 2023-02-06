@@ -210,7 +210,7 @@ export function isPathExists(path: string): boolean {
     return API.WIN32.GetFileAttributesA(Memory.allocAnsiString(path)) != INVALID_FILE_ATTRIBUTES;
 }
 
-export async function delay(ms: number, controller?: AbortController) {
+export function delay(ms: number, controller?: AbortController) {
     if (controller) {
         return new Task(resolve => setTimeout(resolve, ms), controller);
     } else {

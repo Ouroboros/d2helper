@@ -3,7 +3,7 @@ import { D2Game } from './game';
 import { D2Base, ID2Addrs } from './d2base';
 import { D2LevelNo, D2ItemQuality, D2UnitType, D2ItemLocation, D2ItemCode } from './types';
 
-class D2Client_Level extends D2Base {
+class D2Common_Level extends D2Base {
     #D2Common: D2Common;
 
     constructor(addrs: ID2Addrs, D2Common: D2Common) {
@@ -20,7 +20,7 @@ class D2Client_Level extends D2Base {
     }
 }
 
-class D2Client_Room extends D2Base {
+class D2Common_Room extends D2Base {
     #D2Common: D2Common;
 
     constructor(addrs: ID2Addrs, D2Common: D2Common) {
@@ -62,7 +62,7 @@ class D2Client_Room extends D2Base {
     }
 }
 
-class D2Client_Unit extends D2Base {
+class D2Common_Unit extends D2Base {
     #D2Common: D2Common;
 
     constructor(addrs: ID2Addrs, D2Common: D2Common) {
@@ -99,7 +99,7 @@ class D2Client_Unit extends D2Base {
     }
 }
 
-class D2Client_Inventory extends D2Base {
+class D2Common_Inventory extends D2Base {
     #D2Common: D2Common;
 
     constructor(addrs: ID2Addrs, D2Common: D2Common) {
@@ -141,7 +141,7 @@ class D2Client_Inventory extends D2Base {
     }
 }
 
-class D2Client_Item extends D2Base {
+class D2Common_Item extends D2Base {
     #D2Common: D2Common;
 
     constructor(addrs: ID2Addrs, D2Common: D2Common) {
@@ -176,20 +176,20 @@ class D2Client_Item extends D2Base {
 }
 
 export class D2Common extends D2Base {
-    #level      : D2Client_Level;
-    #room       : D2Client_Room;
-    #unit       : D2Client_Unit;
-    #inventory  : D2Client_Inventory;
-    #item       : D2Client_Item;
+    #level      : D2Common_Level;
+    #room       : D2Common_Room;
+    #unit       : D2Common_Unit;
+    #inventory  : D2Common_Inventory;
+    #item       : D2Common_Item;
 
     constructor(addrs: ID2Addrs) {
         super(addrs);
 
-        this.#level     = new D2Client_Level(addrs, this);
-        this.#room      = new D2Client_Room(addrs, this);
-        this.#unit      = new D2Client_Unit(addrs, this);
-        this.#inventory = new D2Client_Inventory(addrs, this);
-        this.#item      = new D2Client_Item(addrs, this);
+        this.#level     = new D2Common_Level(addrs, this);
+        this.#room      = new D2Common_Room(addrs, this);
+        this.#unit      = new D2Common_Unit(addrs, this);
+        this.#inventory = new D2Common_Inventory(addrs, this);
+        this.#item      = new D2Common_Item(addrs, this);
     }
 
     get Level() {
@@ -219,8 +219,6 @@ export class D2Common extends D2Base {
     get IsLadder(): boolean {
         return this.addrs.D2Common.IsLadder.readU8() != 0;
     }
-
-    // helper
 
     getUnitPosition(unit: NativePointer): d2types.Position {
         const pos = Memory.alloc(8);

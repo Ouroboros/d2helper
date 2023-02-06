@@ -263,7 +263,7 @@ export class D2Client extends D2Base {
         }
     }
 
-    async scheduleOnMainThreadAsync<T>(fn: () => T, controller?: AbortController): Promise<T> {
+    scheduleOnMainThreadAsync<T>(fn: () => T, controller?: AbortController): Promise<T> {
         if (controller) {
             return new Task(resolve => {
                 this.scheduleOnMainThread(function() {
