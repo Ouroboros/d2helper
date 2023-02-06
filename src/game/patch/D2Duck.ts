@@ -190,9 +190,9 @@ export class D2DuckPatch {
                 break;
         }
 
-        const bin       = D2Game.D2Common.GetItemsBin(item.TxtFileNo);
-        const name      = D2Game.D2Lang.GetStringFromIndex(bin.NameStrIndex);
-        const quality   = D2Game.D2Common.GetItemQuality(item);
+        const bin       = D2Game.D2Common.Item.GetItemsBin(item.TxtFileNo);
+        const name      = D2Game.D2Lang.GetLocaleText(bin.NameStrIndex);
+        const quality   = D2Game.D2Common.Item.GetItemQuality(item);
         const gameInfo  = D2Game.D2Client.GameInfo;
         const itemIndex = D2Game.getInstance().getItemMaphackID(item);
         // const time      = new Date().getTime();

@@ -46,14 +46,18 @@ class CmdHandler {
     static currentTask: Task<boolean> | null = null;
     private controller = new AbortController;
 
-    loadConfig(): ICommands | null {
+    async loadConfig(): Promise<ICommands | null> {
         const cmds = utils.readFileContent('commands.json5');
-        if (!cmds)
+        if (!cmds) {
+            await this.printGameString('读取 commands.json5 失败');
             return null;
+        }
 
         const cfg = json5.parse(Buffer.from(cmds).toString('utf8'));
-        if (!cfg)
+        if (!cfg) {
+            await this.printGameString('解析 commands.json5 失败');
             return null;
+        }
 
         return cfg;
     }
@@ -165,7 +169,7 @@ class DropCmdHandler extends CmdHandler {
     }
 
     async getCursorItem() {
-        return await this.runOnMainThread(() => D2Game.D2Common.GetCursorItem(D2Game.D2Client.GetPlayerUnit().Inventory));
+        return await this.runOnMainThread(() => D2Game.D2Common.Inventory.GetCursorItem(D2Game.D2Client.GetPlayerUnit().Inventory));
     }
 
     async onCommand(args: string[]) {
@@ -176,7 +180,7 @@ class DropCmdHandler extends CmdHandler {
         if (!params)
             return false;
 
-        const cfg = this.loadConfig()
+        const cfg = await this.loadConfig()
         if (!cfg)
             return false;
 
@@ -207,7 +211,7 @@ class DropCmdHandler extends CmdHandler {
                 if (item.Mode != D2UnitItemMode.InvOrCube)
                     return false;
 
-                if (D2Game.D2Common.InventoryGetItemLocation(item) != D2ItemLocation.Cube)
+                if (D2Game.D2Common.Inventory.GetItemLocation(item) != D2ItemLocation.Cube)
                     return false;
 
                 const itemId = this.getItemMaphackID(item);
@@ -216,7 +220,7 @@ class DropCmdHandler extends CmdHandler {
                     if ((entry.id as number[]).indexOf(itemId) == -1)
                         continue;
 
-                    if (entry.quality.indexOf(D2Game.D2Common.GetItemQuality(item)) == -1)
+                    if (entry.quality.indexOf(D2Game.D2Common.Item.GetItemQuality(item)) == -1)
                         continue;
 
                     if (this.matchRules(entry.rules, item) && entry.exclude) {

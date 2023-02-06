@@ -454,46 +454,14 @@ export function main(addrs: ID2Addrs) {
 
 rpc.exports = function() {
     return {
-        test2() {
-            Interceptor2.call(
-                ptr(0x04DDC37),
-                function(ptr: NativePointer, val: number, size: number): NativePointer {
-                    const p = ptr;
-                    while (size != 0) {
-                        if (ptr.readU8() != 0)
-                            ptr.writeU8(0);
-
-                        ptr = ptr.add(1);
-                        size--;
-                    }
-
-                    return p;
-                },
-                'pointer', ['pointer', 'uint8', 'uint32'], 'mscdecl',
-            );
-        },
-
-        test(p: NativePointer) {
+        test() {
             D2Game.D2Client.scheduleOnMainThread(() => {
-                const i = new d2types.Unit(p);
-                // const r = D2Game.D2Client.IsUnitInvisible(D2Game.D2Client.GetPlayerUnit());
-                console.log(i.Flags2.hex());
-                // const walls = D2Game.D2Client.View.Walls;
-                // for (let i = 0; i != walls.length; i++) {
-                //     const w = walls[i];
-                //     for (let floor = w.Floor; !floor.isNull(); floor = floor.Next) {
-                //         if (floor.isNull())
-                //             continue;
+                // const player = D2Game.D2Client.GetPlayerUnit();
+                const cube = D2Game.D2Common.findCube();
+                if (!cube)
+                    return;
 
-                //         if ((floor.Flags & 3) != 0)
-                //             continue
-
-                //         if (floor.Unit.isNull())
-                //             continue;
-
-                //         utils.log(`${w}<${i}>: floor: ${floor} unit: ${floor.Unit} ${D2Game.D2Client.GetUnitName(floor.Unit)}`);
-                //     }
-                // }
+                utils.log(D2Game.D2Common.findSlotsForItem(cube));
             });
         },
 
@@ -513,17 +481,21 @@ rpc.exports = function() {
         },
 
         printItemNameFromTxtFileNo(txtFileno: number) {
-            const bin   = D2Game.D2Common.GetItemsBin(txtFileno);
-            const name  = D2Game.D2Lang.GetStringFromIndex(bin.NameStrIndex);
+            const bin   = D2Game.D2Common.Item.GetItemsBin(txtFileno);
+            const name  = D2Game.D2Lang.GetLocaleText(bin.NameStrIndex);
 
             utils.log(name);
+        },
+
+        printLocaleText(id: number) {
+            utils.log(D2Game.D2Lang.GetLocaleText(id));
         },
 
         enumUnits(range = 5) {
             D2Game.D2Client.scheduleOnMainThread(function() {
                 const player = D2Game.D2Client.GetPlayerUnit();
                 const pos = D2Game.D2Common.getUnitPosition(player);
-                D2Game.D2Common.FindNearestUnitFromPos(player, pos.x, pos.y, range, new NativeCallback(
+                D2Game.D2Common.Unit.FindNearestUnitFromPos(player, pos.x, pos.y, range, new NativeCallback(
                     (target: NativePointer): number => {
                         const unit = new d2types.Unit(target);
 
@@ -531,9 +503,9 @@ rpc.exports = function() {
                             return 0;
 
                         const pos = D2Game.D2Common.getUnitPosition(unit);
-                        const room = D2Game.D2Common.GetRoomFromUnit(unit);
-                        const levelNo = D2Game.D2Common.GetLevelNoFromRoom(room);
-                        const lvlbin = D2Game.D2Common.LevelGetLevelsBin(levelNo);
+                        const room = D2Game.D2Common.Room.GetRoomFromUnit(unit);
+                        const levelNo = D2Game.D2Common.Room.GetLevelNoFromRoom(room);
+                        const lvlbin = D2Game.D2Common.Level.GetLevelsBin(levelNo);
 
                         console.log([
                             '',
@@ -545,7 +517,7 @@ rpc.exports = function() {
                             `code         = ${unit.ItemCodeString}`,
                             `name         = ${D2Game.D2Client.GetUnitName(unit)}`,
                             `pos          = ${pos.toString()}`,
-                            `hp           = ${D2Game.D2Common.GetUnitStat(unit, types.D2StatID.HP)}`,
+                            `hp           = ${D2Game.D2Common.Unit.GetUnitStat(unit, types.D2StatID.HP)}`,
                             `lvlbin       = ${lvlbin}`,
                             `levelName    = ${lvlbin.LevelName}`,
                             `room2        = ${unit.Path.Room1}`,
@@ -561,14 +533,14 @@ rpc.exports = function() {
 
         enumItems() {
             D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit) {
-                const locatoin = D2Game.D2Common.InventoryGetItemLocation(item);
+                const locatoin = D2Game.D2Common.Inventory.GetItemLocation(item);
                 if (locatoin != types.D2ItemLocation.Equipped)
                     return false;
 
-                if (D2Game.D2Common.GetItemQuality(item) != types.D2ItemQuality.Unique)
+                if (D2Game.D2Common.Item.GetItemQuality(item) != types.D2ItemQuality.Unique)
                     return false;
 
-                const itemCode = D2Game.D2Common.GetItemCodeString(item);
+                const itemCode = D2Game.D2Common.Item.GetItemCodeString(item);
                 utils.log(`<${itemCode}> ${D2Game.D2Client.GetUnitName(item)}`);
 
                 return false;
@@ -588,14 +560,14 @@ rpc.exports = function() {
                 found = false;
 
                 D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit): boolean {
-                    if (D2Game.D2Common.InventoryGetItemLocation(item) != types.D2ItemLocation.Inventory)
+                    if (D2Game.D2Common.Inventory.GetItemLocation(item) != types.D2ItemLocation.Inventory)
                         return false;
 
-                    const code = D2Game.D2Common.GetItemCodeString(item);
+                    const code = D2Game.D2Common.Item.GetItemCodeString(item);
                     if (code != MagicBagCode)
                         return false;
 
-                    const stats = D2Game.D2Common.GetUnitStatByFlags(item, 0x40);
+                    const stats = D2Game.D2Common.Unit.GetUnitStatByFlags(item, 0x40);
                     if (stats.isNull())
                         return false;
 
@@ -622,6 +594,35 @@ rpc.exports = function() {
                 });
 
             }, 100);
+        },
+
+        printCursorItem() {
+            D2Game.D2Client.scheduleOnMainThread(() => {
+                const player = D2Game.D2Client.GetPlayerUnit();
+                const inv = player.Inventory;
+                const item = D2Game.D2Common.Inventory.GetCursorItem(inv);
+
+                if (item.isNull())
+                    return;
+
+                const duck = D2Game.getInstance().getD2Duck()!
+                const info = Memory.alloc(0x2C);
+
+                info.writePointer(player.Inventory);
+                info.add(0x04).writePointer(player);
+                info.add(0x08).writePointer(player);
+                info.add(0x0C).writePointer(player);
+                info.add(0x10).writePointer(item);
+                info.add(0x14).writeU32(0xE);
+                info.add(0x18).writeU32(1);
+
+                const bufsize = 0x800;
+                const buf = Memory.alloc(bufsize * 2);
+
+                duck.ItemText.FormatItemProperties(info, buf, bufsize, 0, 0);
+
+                utils.log(buf.readUtf16String()!);
+            });
         },
     };
 }();

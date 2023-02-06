@@ -389,6 +389,12 @@ export enum D2StatID {
     MaxDurability               = 73,
 }
 
+export enum D2ItemCode {
+    CowPortalScroll = '{89 ',
+    MagicBag        = 'mbg ',
+    Cube            = 'box ',
+}
+
 export namespace D2GSPacket {
     class Base {
         private ptr: NativePointer;

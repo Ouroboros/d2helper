@@ -13,5 +13,8 @@
   },
   "include": [
     "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/game/module/bot_kc.ts"
   ]
 }
