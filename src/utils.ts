@@ -217,3 +217,9 @@ export function delay(ms: number, controller?: AbortController) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
+
+export async function waitUntil(cb: () => Promise<boolean>, ms = 50, controller?: AbortController) {
+    while (!await cb()) {
+        await delay(ms, controller)
+    }
+}

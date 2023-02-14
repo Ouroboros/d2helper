@@ -3,7 +3,7 @@ import * as types from './types';
 import * as d2types from './d2types';
 import { API } from '../modules';
 import { ArrayBuffer2, Interceptor2 } from '../utils';
-import { D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType } from './types';
+import { D2CollisionFlags, D2ClientCmd, D2GSCmd, D2SkillID, D2StateID, D2GSPacket, D2LevelNo, D2StringColor, D2UnitType } from './types';
 import { ID2Addrs, D2Net, D2Client, D2Common, D2Multi, D2Lang } from './d2module';
 import { D2DuckPatch } from './patch/D2Duck';
 import { InternalPatch } from './patch/internal';
@@ -456,12 +456,43 @@ rpc.exports = function() {
     return {
         test() {
             D2Game.D2Client.scheduleOnMainThread(() => {
-                // const player = D2Game.D2Client.GetPlayerUnit();
+                const player = D2Game.D2Client.GetPlayerUnit();
+
+                D2Game.D2Client.SetUIVars(types.D2UIVars.NpcMenu, 1, 0);
+
                 const cube = D2Game.D2Common.findCube();
-                if (!cube)
+                D2Game.D2Client.useItem(cube!.ID);
+
+                return;
+                const playerPos = D2Game.D2Common.Unit.getUnitCoord(player);
+                const target = new d2types.Unit(0x15b66c00);
+                const targetPos = D2Game.D2Common.Unit.getUnitCoord(target);
+
+                const pos1 = D2Game.D2Common.Unit.getCoordByDistance(playerPos, targetPos, 30);
+                const pos2 = D2Game.D2Common.Unit.getCoordByDistance(playerPos, targetPos, 3);
+                const mask = D2CollisionFlags.Wall | D2CollisionFlags.BlockPlayer | D2CollisionFlags.Door;
+                const room = D2Game.D2Common.Room.GetRoomFromUnit(player);
+
+                utils.log(pos1);
+                utils.log(pos2);
+
+                utils.log(D2Game.D2Common.Collision.CheckMaskWithSizeXY(room, pos1.x, pos1.y, 1, 1, D2CollisionFlags.AllMask));
+                utils.log(D2Game.D2Common.Collision.CheckMaskWithSizeXY(room, pos2.x, pos2.y, 1, 1, D2CollisionFlags.AllMask));
+
+                // const mask = D2Game.D2Common.Collision.CheckMaskWithSizeXY(D2Game.D2Common.Room.GetRoomFromUnit(player), pos.x, pos.y, 1, 1, D2CollisionFlags.AllMask);
+                // utils.log(mask.hex());
+
+                return;
+            });
+        },
+
+        findUnit(id: number) {
+            D2Game.D2Client.scheduleOnMainThread(() => {
+                const item = D2Game.D2Client.FindClientSideUnit(id, D2UnitType.Item);
+                if (item.isNull())
                     return;
 
-                utils.log(D2Game.D2Common.findSlotsForItem(cube));
+                utils.log(`${item} ${item.ID} ${D2Game.D2Client.GetUnitName(item)}`);
             });
         },
 
@@ -494,15 +525,15 @@ rpc.exports = function() {
         enumUnits(range = 5) {
             D2Game.D2Client.scheduleOnMainThread(function() {
                 const player = D2Game.D2Client.GetPlayerUnit();
-                const pos = D2Game.D2Common.getUnitPosition(player);
-                D2Game.D2Common.Unit.FindNearestUnitFromPos(player, pos.x, pos.y, range, new NativeCallback(
+                const coord = D2Game.D2Common.Unit.getUnitCoord(player);
+                D2Game.D2Common.Unit.FindNearestUnitFromPos(player, coord.x, coord.y, range, new NativeCallback(
                     (target: NativePointer): number => {
                         const unit = new d2types.Unit(target);
 
                         if (unit.Type == D2UnitType.Player)
                             return 0;
 
-                        const pos = D2Game.D2Common.getUnitPosition(unit);
+                        const coord = D2Game.D2Common.Unit.getUnitCoord(unit);
                         const room = D2Game.D2Common.Room.GetRoomFromUnit(unit);
                         const levelNo = D2Game.D2Common.Room.GetLevelNoFromRoom(room);
                         const lvlbin = D2Game.D2Common.Level.GetLevelsBin(levelNo);
@@ -516,7 +547,7 @@ rpc.exports = function() {
                             `code         = ${unit.ItemCode}`,
                             `code         = ${unit.ItemCodeString}`,
                             `name         = ${D2Game.D2Client.GetUnitName(unit)}`,
-                            `pos          = ${pos.toString()}`,
+                            `coord        = ${coord.toString()}`,
                             `hp           = ${D2Game.D2Common.Unit.GetUnitStat(unit, types.D2StatID.HP)}`,
                             `lvlbin       = ${lvlbin}`,
                             `levelName    = ${lvlbin.LevelName}`,
@@ -533,8 +564,8 @@ rpc.exports = function() {
 
         enumItems() {
             D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit) {
-                const locatoin = D2Game.D2Common.Inventory.GetItemLocation(item);
-                if (locatoin != types.D2ItemLocation.Equipped)
+                const locatoin = D2Game.D2Common.Inventory.GetItemInvPage(item);
+                if (locatoin != types.D2ItemInvPage.Equip)
                     return false;
 
                 if (D2Game.D2Common.Item.GetItemQuality(item) != types.D2ItemQuality.Unique)
@@ -560,7 +591,7 @@ rpc.exports = function() {
                 found = false;
 
                 D2Game.D2Common.enumInventoryItems(function(item: d2types.Unit): boolean {
-                    if (D2Game.D2Common.Inventory.GetItemLocation(item) != types.D2ItemLocation.Inventory)
+                    if (D2Game.D2Common.Inventory.GetItemInvPage(item) != types.D2ItemInvPage.Inventory)
                         return false;
 
                     const code = D2Game.D2Common.Item.GetItemCodeString(item);
@@ -621,7 +652,14 @@ rpc.exports = function() {
 
                 duck.ItemText.FormatItemProperties(info, buf, bufsize, 0, 0);
 
-                utils.log(buf.readUtf16String()!);
+                const lines = [
+                    '',
+                    `ptr: ${item} ${item.ID}`,
+                    `quality: ${D2Game.D2Common.Item.GetItemQuality(item)}`,
+                    buf.readUtf16String()!.split('\n').reverse().join('\n'),
+                ];
+
+                utils.log(lines.join('\n'));
             });
         },
     };

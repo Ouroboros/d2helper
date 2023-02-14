@@ -322,11 +322,20 @@ export enum D2ItemFlags {
     FromPlayer                  = 0x01000000,
 }
 
-export enum D2ItemLocation {
+export enum D2InventoryGrids {
+    BodyLoc                     = 0,
+    Belt                        = 1,
+    Inventory                   = 2,
+}
+
+export enum D2ItemInvPage {
     Inventory                   = 0,
+    // Equip                       = 1,
+    Trade                       = 2,
     Cube                        = 3,
-    Store                       = 4,
-    Equipped                    = 0xFF,
+    Stash                       = 4,
+    Belt                        = 5,
+    Equip                       = 0xFF,
 }
 
 export enum D2ItemQuality {
@@ -387,6 +396,68 @@ export enum D2StatID {
     ColdResist                  = 43,
     Durability                  = 72,
     MaxDurability               = 73,
+}
+
+export enum D2CollisionFlags {
+    None                        = 0x0000,
+    BlockPlayer                 = 0x0001,           // 'black space' in arcane sanctuary, cliff walls etc
+    BlockMissile                = 0x0002,           // tile based obstacles you can't shoot over
+    Wall                        = 0x0004,           // again used inconsistantly -.-
+    BlockLeap                   = 0x0008,
+    AlternateFloor              = 0x0010,           // some floors have this set, others don't
+    Blank                       = 0x0020,           // returned if the subtile is invalid
+    Missile                     = 0x0040,
+    Player                      = 0x0080,
+    Monster                     = 0x0100,
+    Item                        = 0x0200,
+    Object                      = 0x0400,
+    Door                        = 0x0800,
+    UnitRelated                 = 0x1000,           // set for units sometimes, but not always
+    Pet                         = 0x2000,
+    _4000                       = 0x4000,
+    Corpse                      = 0x8000,           // also used by portals, but dead monsters are mask 0x8000
+    AllMask                     = 0xFFFFFFFF,
+}
+
+export enum D2UIVars {
+    Game                        = 0x00,             // Game
+    Inventory                   = 0x01,             // Player Inventory
+    StatScreen                  = 0x02,             // Player Stat Screen
+    MiniSkill                   = 0x03,             // Skill Selection
+    SkillTree                   = 0x04,             // Player Skill Tree
+    ChatBox                     = 0x05,             // Chat Box
+    NewStats                    = 0x06,             // Red NewStats Button
+    NewSkills                   = 0x07,             // Red NewSkills Button
+    NpcMenu                     = 0x08,             // NPC options menu
+    EscMenu                     = 0x09,             // Esc Menu
+    AutoMap                     = 0x0A,             // Automap
+    Config                      = 0x0B,             // Key Configuration Menu
+    NpcShop                     = 0x0C,             // NPC Trade
+    HoldAlt                     = 0x0D,             // Alt Items Highlight
+    Anvil                       = 0x0E,             // Anvil
+    QuestScreen                 = 0x0F,             // Quest Screen
+    IniScroll                   = 0x10,             // Inifuss Tree Scroll
+    QuestLog                    = 0x11,             // Quest Log Red Button
+    Unknown18                   = 0x12,
+    Hiricons                    = 0x13,
+    Waypoint                    = 0x14,             // Waypoint Screen
+    MiniPanel                   = 0x15,             // CtrlPnl7 Mini Popop Menu
+    PartyScreen                 = 0x16,             // Multiplayer Party Screen
+    MpTrade                     = 0x17,             // Multiplayer Trade
+    Msglog                      = 0x18,             // Messages Log
+    Stash                       = 0x19,             // Player Stash
+    Cube                        = 0x1A,             // Horadric Cube
+    SteegStone                  = 0x1B,             // Guild Steeg Stone
+    GuildVault                  = 0x1C,             // Guild Vault
+    Unknown29                   = 0x1D,
+    Unknown30                   = 0x1E,
+    BeltRows                    = 0x1F,             // Belt Rows Popup
+    Unknown32                   = 0x20,
+    HelpScreen                  = 0x21,             // Help Screen
+    HelpButton                  = 0x22,             // Help Button
+    HireIcons                   = 0x23,             // Party Icons
+    MercInv                     = 0x24,             // Mercenary Inventory
+    RecipeScroll                = 0x25,             // Unused Recipe Scroll
 }
 
 export enum D2ItemCode {

@@ -1,9 +1,11 @@
-export class Position {
+import { D2UnitType, D2InventoryGrids } from "./types";
+
+export class Coord {
     x: number;
     y: number;
 
-    static default(): Position {
-        return new Position(0, 0);
+    static default(): Coord {
+        return new Coord(0, 0);
     }
 
     constructor(x: number, y: number) {
@@ -11,18 +13,18 @@ export class Position {
         this.y = y;
     }
 
-    equals(p: Position): boolean {
+    equals(p: Coord): boolean {
         return this.x == p.x && this.y == p.y;
     }
 
-    set(p: Position): Position {
+    set(p: Coord): Coord {
         this.x = p.x;
         this.y = p.y;
         return this;
     }
 
     toString(): string {
-        return `{x:${this.x},y:${this.y}}`;
+        return `{x:${Math.floor(this.x)},y:${Math.floor(this.y)}}`;
     }
 }
 
@@ -131,6 +133,13 @@ export class Unit extends NativePointer {
         return this.add(0x10).readU32();
     }
 
+    get PlayerData(): PlayerData {
+        if (this.Type != D2UnitType.Player)
+            throw new Error(`unit type != Player: ${this.Type}`);
+
+        return new PlayerData(this.add(0x14).readPointer());
+    }
+
     get Act(): NativePointer {
         return this.add(0x1C).readPointer();
     }
@@ -174,6 +183,10 @@ export class Unit extends NativePointer {
     isVisible() {
         return (this.Flags2 & 0x80) != 0;
     }
+}
+
+export class PlayerData extends NativePointer {
+
 }
 
 export class Room1 extends NativePointer {
@@ -264,6 +277,44 @@ export class ItemPath extends NativePointer {
 }
 
 export class Inventory extends NativePointer {
+    GetGrid(gridIndex: number): InventoryGrid {
+        return new InventoryGrid(this.add(0x14).readPointer().add(InventoryGrid.GRID_SIZE * gridIndex));
+    }
+
+    GetInventoryGrid(invIndex: number): InventoryGrid {
+        invIndex += D2InventoryGrids.Inventory;
+        return new InventoryGrid(this.add(0x14).readPointer().add(InventoryGrid.GRID_SIZE * invIndex));
+    }
+
+    get GridCount(): number {
+        return this.add(0x18).readU32();
+    }
+}
+
+export class InventoryGrid extends NativePointer {
+    static GRID_SIZE = 0x10;
+
+    get FirstItem(): Unit {
+        return new Unit(this.readPointer());
+    }
+
+    get LastItem(): Unit {
+        return new Unit(this.add(4).readPointer());
+    }
+
+    get Width(): number {
+        return this.add(8).readU8();
+    }
+
+    get Height(): number {
+        return this.add(9).readU8();
+    }
+
+    get Items(): Unit[] {
+        const count = this.Width * this.Height;
+        const p = this.add(0xC).readPointer();
+        return Array.from(Array(count), (_, index) => new Unit(p.add(index * 4).readPointer()));
+    }
 }
 
 export class Stat extends NativePointer {

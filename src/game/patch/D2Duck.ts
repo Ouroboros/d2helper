@@ -25,6 +25,10 @@ export interface ID2Duck {
         FormatItemProperties            : NativeFunction<void, [NativePointer, NativePointer, number, number, number]>;
         Mode3CallFormatItemProperties   : NativePointer;
     }
+
+    AutoTransmute: {
+        Toggle                          : NativePointer;
+    }
 }
 
 export class D2DuckPatch {
@@ -51,32 +55,6 @@ export class D2DuckPatch {
 
         const timestamp = d2duck.base.add(d2duck.base.add(0x3C).readU32() + 8).readU32();
         switch (timestamp) {
-            // case 0x6395FBE6:
-            //     return {
-            //         AutoPick: {
-            //             PrintHint                       : d2duck.base.add(0x256C0),
-            //             // PickupItem                      : d2duck.base.add(0x5EFD0),
-            //             // OnItemPickedUp                  : d2duck.base.add(0x25500),
-            //             // PutItemToCube                   : d2duck.base.add(0x5EE90),
-            //             // PutItemToCubeCehck1             : d2duck.base.add(0x5EEEF),
-
-            //             // CallFindNearest                 : d2duck.base.add(0x25818),
-            //             GetPickupType                   : new NativeFunction(d2duck.base.add(0x25660), 'uint8', ['pointer'], 'mscdecl'),
-            //         },
-
-            //         MagicBag: {
-            //             GetCertainBagWhichStoreItem     : new NativeFunction(d2duck.base.add(0x4C3C0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'mscdecl'),
-            //         },
-
-            //         Hackmap: {
-            //             GetUnitHiddenType              : new NativeFunction(d2duck.base.add(0x1D5B0), 'uint8', ['pointer'], 'fastcall'),
-            //         },
-
-            //         // FunctionPointer: {
-            //         //     D2Common_FindNearestUnitFromPos : d2duck.base.add(0x4A00610),
-            //         // },
-            //     };
-
             case 0x63CA4734:
                 D2DuckPatch.cachedDuck = {
                     AutoPick: {
@@ -97,6 +75,10 @@ export class D2DuckPatch {
                         FormatItemProperties        : new NativeFunction(d2duck.base.add(0xF52DF00 - 0xF4F0000), 'void', ['pointer', 'pointer', 'uint32', 'uint32', 'uint32'], 'mscdecl'),
 
                         Mode3CallFormatItemProperties   : d2duck.base.add(0xF53003D - 0xF4F0000),
+                    },
+
+                    AutoTransmute: {
+                        Toggle                      : d2duck.base.add(0xF57CCA0 - 0xF4F0000),
                     },
                 };
         }

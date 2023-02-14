@@ -4,32 +4,34 @@ import { API, Modules } from '../modules';
 import { Interceptor2 } from '../utils';
 import { D2Game } from './game';
 import { Task, AbortController } from '../task';
-import { D2Base, ID2Addrs } from './d2base';
+import { D2Base } from './d2base';
 import {
-    D2ClientState,
     D2ClientCmd,
     D2StateID,
     D2GSPacket,
     D2StringColor,
     D2UnitType,
+    D2SkillID,
+    D2ItemInvPage,
+    D2UIVars,
 } from './types';
 
 interface ICommandHandler {
-    handleCommand(args: string[]): boolean;
+    handleCommand(args: string[]): Promise<boolean>;
 }
 
 export class D2Client extends D2Base {
-    gameLoaded                          = false;
-    gameJoinTime                        = 0;
-    leftSkill                           = 0;
-    rightSkill                          = 0;
-    activeStates: Set<number>           = new Set;
-    levelNo                             = 0;
-    playerLocation: d2types.Position    = d2types.Position.default();
-    gameWindow: NativePointer           = NULL;
-    gameWindowProc: NativeFunction<NativePointer, [NativePointer, number, NativePointer, NativePointer]> = new NativeFunction(NULL, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer']);
+    gameLoaded      = false;
+    gameJoinTime    = 0;
+    leftSkill       = 0;
+    rightSkill      = 0;
+    activeStates    = new Set<number>;
+    levelNo         = 0;
+    playerLocation  = d2types.Coord.default();
+    gameWindow      = NULL;
+    gameWindowProc  = new NativeFunction(NULL, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer']);
 
-    mainThreadId = 0;
+    mainThreadId    = 0;
     mainThreadCallbacks : (() => void)[] = [];
     idleLoopCallbacks   : (() => void)[] = [];
     keyDownCallbacks    : ((vk: number) => void)[] = [];
@@ -104,11 +106,18 @@ export class D2Client extends D2Base {
         const HandleCommand = Interceptor2.jmp(
             this.addrs.D2Client.HandleCommand,
             (cmdW: NativePointer, cmdA: NativePointer, arg3: number): number => {
-                this.handleCommand(cmdW);
+                this.handleCommand(cmdW.readUtf16String()!);
                 return HandleCommand(cmdW, cmdA, arg3);
             },
             'uint32', ['pointer', 'pointer', 'uint32'], 'thiscall',
         );
+
+        Memory.patchCode(this.addrs.D2Client.HandleKeyDownAfterInput1, 1, code => code.writeU8(0));
+        Memory.patchCode(this.addrs.D2Client.HandleKeyDownAfterInput2, 1, code => code.writeU8(0));
+
+        Memory.patchCode(this.addrs.D2Client.CreateMainScreenButtons, 7, code => {
+            code.writeByteArray([0xB9, 0x13, 0x00, 0x00, 0x00, 0x8B, 0xF0]);
+        });
     }
 
     get MousePos() {
@@ -123,7 +132,7 @@ export class D2Client extends D2Base {
         return p.isNull() ? null : new d2types.GameInfo(p);
     }
 
-    get ClientState(): D2ClientState {
+    get ClientState(): number {
         return this.addrs.D2Client.ClientState.readU32();
     }
 
@@ -188,6 +197,14 @@ export class D2Client extends D2Base {
         return name.readUtf16String()!;
     }
 
+    GetUIVars(v: D2UIVars): number {
+        return this.addrs.D2Client.GetUIVars(v);
+    }
+
+    SetUIVars(v: D2UIVars, type: number, arg3: number): number {
+        return this.addrs.D2Client.SetUIVars(v, type, arg3);
+    }
+
     PrintGameString(msg: string, color: D2StringColor = D2StringColor.Default) {
         const s = utils.UTF16(msg);
         const len = msg.length * 2;
@@ -222,7 +239,8 @@ export class D2Client extends D2Base {
     }
 
     onSetState(state: D2GSPacket.SetState) {
-        if (state.unitGUID != this.GetPlayerUnit().ID)
+        const player = this.GetPlayerUnit();
+        if (player.isNull() || state.unitGUID != this.GetPlayerUnit().ID)
             return;
 
         switch (state.state) {
@@ -242,12 +260,12 @@ export class D2Client extends D2Base {
 
     onWalkVerify(walk: D2GSPacket.WalkVerify) {
         // utils.log(`walk verify: ${walk.x}, ${walk.y}`);
-        this.playerLocation = new d2types.Position(walk.x, walk.y);
+        this.playerLocation = new d2types.Coord(walk.x, walk.y);
     }
 
     onReassignPlayer(player: D2GSPacket.ReassignPlayer) {
         // utils.log(`reassign player: ${player.x}, ${player.y}`);
-        this.playerLocation = new d2types.Position(player.x, player.y);
+        this.playerLocation = new d2types.Coord(player.x, player.y);
     }
 
     showKeyAction(name: string, state: boolean) {
@@ -305,8 +323,7 @@ export class D2Client extends D2Base {
                 const previousKeyState = msg.add(0xC).readU32() & 0x40000000;
 
                 if (previousKeyState == 0) {
-                    for (const cb of this.keyDownCallbacks)
-                        cb(vk);
+                    this.keyDownCallbacks.forEach(cb => cb(vk));
                 }
 
                 break;
@@ -318,9 +335,11 @@ export class D2Client extends D2Base {
         this.commandHandler[cmd] = handler;
     }
 
-    handleCommand(cmdW: NativePointer): boolean {
-        const cmdline = cmdW.readUtf16String()!;
+    handleCommand(cmdline: string) {
+        this.handleCommandAsync(cmdline).catch(() => {});
+    }
 
+    async handleCommandAsync(cmdline: string) {
         if (cmdline[0] != '.')
             return false;
 
@@ -331,7 +350,7 @@ export class D2Client extends D2Base {
         if (!handler)
             return false;
 
-        return handler.handleCommand(args.slice(1));
+        return handler.handleCommand(args);
     }
 
     hasState(state: number): boolean {
@@ -429,15 +448,63 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
-    castSkill(skillId: number, lefthand = false, pos?: d2types.Position) {
-        if (!pos)
-            pos = D2Game.D2Client.getPlayerPosition();
+    OnRightClickGum = NULL;
 
-        D2Game.D2Client.selectSkill(lefthand, skillId);
+    castSkill(skillId: number, lefthand = false, coord?: d2types.Coord) {
+        if (!coord)
+            coord = this.getPlayerCoord();
+
+        this.selectSkill(lefthand, skillId);
         if (lefthand) {
-            D2Game.D2Client.leftSkillOnLocation(pos.x, pos.y);
+            this.leftSkillOnLocation(coord.x, coord.y);
         } else {
-            D2Game.D2Client.rightSkillOnLocation(pos.x, pos.y);
+            switch (skillId) {
+                case D2SkillID.Sor_Teleport:
+                case D2SkillID.Dru_Teleport:
+                    break;
+
+                default:
+                    this.rightSkillOnLocation(coord.x, coord.y);
+                    return;
+            }
+
+            // if (this.OnRightClickGum.isNull()) {
+            //     const SIZE = 0x1000;
+            //     this.OnRightClickGum = Memory.alloc(SIZE);
+            //     Memory.patchCode(this.OnRightClickGum, SIZE, code => {
+            //         const w = new X86Writer(code, {pc: this.OnRightClickGum});
+            //         w.putPushReg('esi');
+            //         w.putMovRegReg('esi', 'ecx');
+            //         w.putCallAddress(ptr(0x462BA0));
+            //         w.putPopReg('esi');
+            //         w.putRet();
+            //     });
+
+            //     utils.log(`this.OnRightClickGum: ${this.OnRightClickGum}`);
+            // }
+
+            // const param = Memory.alloc(0x20);
+            // param.writeU32(0x46);
+            // param.add(0x04).writePointer(this.GetPlayerUnit());
+            // param.add(0x0C).writeU32(pos.x);
+            // param.add(0x10).writeU32(pos.y);
+
+            // new NativeFunction(this.OnRightClickGum, 'void', ['pointer'], 'fastcall')(param);
+            // ptr(0x7A0654).writeU32(1);
+
+            // new NativeFunction(ptr(0x481030), 'void', ['uint8', 'pointer', 'uint32', 'uint32', 'uint32'], 'fastcall')(D2ClientCmd.RIGHTSKILLONLOCATION, this.GetPlayerUnit(), pos.x, pos.y, 0);
+
+            if (1) {
+                const param = Memory.alloc(0x20);
+                param.writeU32(skillId);
+                param.add(0x04).writeU32(0xFFFFFFFF);
+                param.add(0x08).writeU32(coord.x);
+                param.add(0x0C).writeU32(coord.y);
+                new NativeFunction(ptr(0x480C10), 'uint32', ['uint32', 'pointer', 'pointer', 'uint32'], 'fastcall')(0x15, this.GetPlayerUnit(), param, 0);
+                // utils.log(`D2Client_PlaySkillAnimation: ${ret}`);
+            }
+
+            this.rightSkillOnLocation(coord.x, coord.y);
         }
     }
 
@@ -502,6 +569,16 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
+    npcIdentifyItems(npcUnitId: number) {
+        const SIZE = 5;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.NPC_IDENTIFYITEMS)
+        payload.add(0x01).writeU32(npcUnitId);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
     npcCancel(unitType: number, unitId: number) {
         const SIZE = 9;
         const payload = Memory.alloc(SIZE);
@@ -517,12 +594,12 @@ export class D2Client extends D2Base {
         const SIZE = 0xD;
         const payload = Memory.alloc(SIZE);
 
-        const pos = this.getPlayerPosition();
+        const coord = this.getPlayerCoord();
 
         payload.writeU8(D2ClientCmd.USEITEM)
         payload.add(1).writeU32(unitId)
-        payload.add(5).writeU32(pos.x)
-        payload.add(9).writeU32(pos.y);
+        payload.add(5).writeU32(coord.x)
+        payload.add(9).writeU32(coord.y);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -537,12 +614,35 @@ export class D2Client extends D2Base {
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
 
+    itemToBuffer(unitId: number, x: number, y: number, page: D2ItemInvPage) {
+        const SIZE = 0x11;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.ITEMTOBUFFER)
+        payload.add(0x1).writeU32(unitId);
+        payload.add(0x5).writeU32(x);
+        payload.add(0x9).writeU32(y);
+        payload.add(0xD).writeU32(page);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
     dropItem(unitId: number) {
         const SIZE = 5;
         const payload = Memory.alloc(SIZE);
 
         payload.writeU8(D2ClientCmd.DROPITEM)
         payload.add(1).writeU32(unitId);
+
+        D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
+    }
+
+    addStat(id: number) {
+        const SIZE = 3;
+        const payload = Memory.alloc(SIZE);
+
+        payload.writeU8(D2ClientCmd.ADDSTAT)
+        payload.add(1).writeU16(id);
 
         D2Game.D2Net.SendPacket(utils.ptrToBytes(payload, SIZE));
     }
@@ -559,12 +659,16 @@ export class D2Client extends D2Base {
         this.leftSkill              = 0;
         this.rightSkill             = 0;
         this.levelNo                 = 0;
-        this.playerLocation         = d2types.Position.default();
+        this.playerLocation         = d2types.Coord.default();
         this.activeStates.clear();
         // this.mainThreadCallbacks    = [];
     }
 
-    getPlayerPosition() {
-        return D2Game.D2Common.getUnitPosition(D2Game.D2Client.GetPlayerUnit());
+    getPlayerCoord() {
+        return D2Game.D2Common.Unit.getUnitCoord(this.GetPlayerUnit());
+    }
+
+    getDistanceBetweenPoints(pos1: d2types.Coord, pos2: d2types.Coord) {
+        return Math.abs(Math.sqrt(Math.pow(pos2.x - pos1.x, 2) + Math.pow(pos2.y - pos1.y, 2)))
     }
 }

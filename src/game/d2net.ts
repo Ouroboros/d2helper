@@ -139,9 +139,9 @@ export class D2Net extends D2Base {
             if (!utils.Logging)
                 return;
 
-            const now = utils.getCurrentTime()
-            const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
-            console.log(`${time} <${D2ClientCmd[packetId]}:${packetId.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
+            // const now = utils.getCurrentTime()
+            // const time = `[${now.getHours().pad(2)}:${now.getMinutes().pad(2)}:${now.getSeconds().pad(2)}.${now.getMilliseconds().pad(3)}]`;
+            utils.log(`<${D2ClientCmd[packetId]}:${packetId.hex()}> <len:${size.hex()}> <unk:${arg2.hex()}> ${s}\n${hexdump(buf.readByteArray(size)!)}\n`);
         }
 
         switch (packetId) {
@@ -425,7 +425,7 @@ export class D2Net extends D2Base {
                 const pos = buf.add(1).readU32();
                 const x = pos & 0xFFFF;
                 const y = pos >> 16;
-                log(`update position: pos = ${pos.hex()} x = ${x}, y = ${y}`);
+                log(`update Coord: pos = ${pos.hex()} x = ${x}, y = ${y}`);
                 break;
             }
 

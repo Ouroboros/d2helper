@@ -1,70 +1,81 @@
 export interface ID2Addrs {
     D2Net: {
-        ValidatePacket          : NativeFunction<number, [NativePointerValue, number, NativePointerValue]>;
-        SendPacket              : NativeFunction<number, [number, number, NativePointerValue]>;
+        ValidatePacket                  : NativeFunction<number, [NativePointerValue, number, NativePointerValue]>;
+        SendPacket                      : NativeFunction<number, [number, number, NativePointerValue]>;
     }
 
     D2Common: {
-        ItemTable                   : NativePointer;
-        IsLadder                    : NativePointer;
+        ItemTable                       : NativePointer;
+        IsLadder                        : NativePointer;
 
         Unit: {
-            GetUnitPosition         : NativeFunction<void, [NativePointer, NativePointer]>;
-            GetUnitDistanceToPos    : NativeFunction<number, [NativePointer, number, number]>;
-            GetUnitStat             : NativeFunction<number, [NativePointer, number, number]>;
-            GetUnitStatByFlags      : NativeFunction<NativePointer, [NativePointer, number]>;
-            GetUnitDistance         : NativeFunction<number, [NativePointer, number, number]>;
-            FindNearestUnitFromPos  : NativeFunction<NativePointer, [NativePointer, number, number, number, NativePointer]>;
+            GetUnitCoord                : NativeFunction<void, [NativePointer, NativePointer]>;
+            GetUnitDistanceToCoord      : NativeFunction<number, [NativePointer, number, number]>;
+            GetUnitStat                 : NativeFunction<number, [NativePointer, number, number]>;
+            GetUnitStatByFlags          : NativeFunction<NativePointer, [NativePointer, number]>;
+            GetUnitDistance             : NativeFunction<number, [NativePointer, number, number]>;
+            GetPlayerData               : NativeFunction<NativePointer, [NativePointer]>;
+            FindNearestUnitFromCoord    : NativeFunction<NativePointer, [NativePointer, number, number, number, NativePointer]>;
+            TestCollisionByCoordinates  : NativeFunction<number, [NativePointer, number, number, number]>;
         }
 
         Room: {
-            GetNearbyRooms          : NativeFunction<void, [NativePointer, NativePointer, NativePointer]>;
-            GetRoomFromUnit         : NativeFunction<NativePointer, [NativePointer]>;
-            GetLevelNoFromRoom      : NativeFunction<number, [NativePointer]>;
+            GetAdjacentRooms            : NativeFunction<void, [NativePointer, NativePointer, NativePointer]>;
+            GetRoomFromUnit             : NativeFunction<NativePointer, [NativePointer]>;
+            GetLevelNoFromRoom          : NativeFunction<number, [NativePointer]>;
         }
 
         Level: {
-            GetLevelsBin            : NativeFunction<NativePointer, [number]>;
-        }
-
-        Item: {
-            CheckItemType           : NativeFunction<number, [NativePointer, number]>;
-            GetItemsBin             : NativeFunction<NativePointer, [number]>;
-            GetItemQuality          : NativeFunction<number, [NativePointer]>;
-            GetItemCode             : NativeFunction<number, [NativePointer]>;
+            GetLevelsBin                : NativeFunction<NativePointer, [number]>;
         }
 
         Inventory: {
-            GetItemLocation         : NativeFunction<number, [NativePointer]>;
-            GetFirstItem            : NativeFunction<NativePointer, [NativePointer]>;
-            GetNextItem             : NativeFunction<NativePointer, [NativePointer]>;
-            GetRecordIndex          : NativeFunction<number, [NativePointer, number, number]>;
-            GetCursorItem           : NativeFunction<NativePointer, [NativePointer]>;
-            FindSlotsForItem        : NativeFunction<number, [NativePointer, NativePointer, number, NativePointer, NativePointer, number]>;
+            GetItemInvPage              : NativeFunction<number, [NativePointer]>;
+            GetFirstItem                : NativeFunction<NativePointer, [NativePointer]>;
+            GetNextItem                 : NativeFunction<NativePointer, [NativePointer]>;
+            GetRecordIndex              : NativeFunction<number, [NativePointer, number, number]>;
+            GetCursorItem               : NativeFunction<NativePointer, [NativePointer]>;
+            FindSlotsForItem            : NativeFunction<number, [NativePointer, NativePointer, number, NativePointer, NativePointer, number]>;
+        }
+
+        Item: {
+            CheckItemType               : NativeFunction<number, [NativePointer, number]>;
+            GetItemsBin                 : NativeFunction<NativePointer, [number]>;
+            GetItemQuality              : NativeFunction<number, [NativePointer]>;
+            GetItemCode                 : NativeFunction<number, [NativePointer]>;
+        }
+
+        Collision: {
+            CheckMaskWithSizeXY         : NativeFunction<number, [NativePointer, number, number, number, number, number]>;
         }
     }
 
     D2Client: {
-        MouseX                  : NativePointer;
-        MouseY                  : NativePointer;
-        GameInfo                : NativePointer;
-        ClientState             : NativePointer;
-        View                    : NativePointer;
+        MouseX                          : NativePointer;
+        MouseY                          : NativePointer;
+        GameInfo                        : NativePointer;
+        ClientState                     : NativePointer;
+        View                            : NativePointer;
+        HandleKeyDownAfterInput1        : NativePointer;
+        HandleKeyDownAfterInput2        : NativePointer;
+        CreateMainScreenButtons         : NativePointer;
 
-        HandleCommand           : NativeFunction<number, [NativePointer, NativePointer, number]>;
+        HandleCommand                   : NativeFunction<number, [NativePointer, NativePointer, number]>;
 
-        LeaveGame               : NativeFunction<void, [number, NativePointer]>;
+        LeaveGame                       : NativeFunction<void, [number, NativePointer]>;
 
-        GetPlayerUnit           : NativeFunction<NativePointer, []>;
-        PrintGameString         : NativeFunction<void, [NativePointer, number]>;
-        PrintPartyString        : NativeFunction<void, [NativePointer, number]>;
-        GetLevelNameFromLevelNo : NativeFunction<NativePointer, [number]>;
-        FindClientSideUnit      : NativeFunction<NativePointer, [number, number]>;
-        FindServerSideUnit      : NativeFunction<NativePointer, [number, number]>;
-        CancelTrade             : NativeFunction<number, []>;
-        OnKeyDown               : NativeFunction<void, [NativePointer]>;
-        GetUnitName             : NativeFunction<NativePointer, [NativePointer]>;
-        IsUnitVisible         : NativeFunction<number, [NativePointer]>;
+        GetPlayerUnit                   : NativeFunction<NativePointer, []>;
+        PrintGameString                 : NativeFunction<void, [NativePointer, number]>;
+        PrintPartyString                : NativeFunction<void, [NativePointer, number]>;
+        GetLevelNameFromLevelNo         : NativeFunction<NativePointer, [number]>;
+        FindClientSideUnit              : NativeFunction<NativePointer, [number, number]>;
+        FindServerSideUnit              : NativeFunction<NativePointer, [number, number]>;
+        CancelTrade                     : NativeFunction<number, []>;
+        OnKeyDown                       : NativeFunction<void, [NativePointer]>;
+        GetUnitName                     : NativeFunction<NativePointer, [NativePointer]>;
+        IsUnitVisible                   : NativeFunction<number, [NativePointer]>;
+        GetUIVars                       : NativeFunction<number, [number]>;
+        SetUIVars                       : NativeFunction<number, [number, number, number]>;
 
         // unknown
         // sub_486D10              : NativeFunction<number, []>;
