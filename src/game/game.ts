@@ -655,6 +655,7 @@ rpc.exports = function() {
                 const lines = [
                     '',
                     `ptr: ${item} ${item.ID}`,
+                    `code: ${D2Game.D2Common.Item.GetItemCodeString(item)}`,
                     `quality: ${D2Game.D2Common.Item.GetItemQuality(item)}`,
                     buf.readUtf16String()!.split('\n').reverse().join('\n'),
                 ];

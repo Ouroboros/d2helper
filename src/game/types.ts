@@ -261,6 +261,8 @@ export enum D2LevelNo {
     Harrogath                   = 0x6D,     // 哈洛加斯
     MooMooFarm1                 = 137,      // 牛一
     MooMooFarm2                 = 151,      // 牛二
+    TheIceCave                  = 145,      // 寒冰地穴
+    ThePowCity                  = 146,      // 毁灭之城
 }
 
 export enum D2UnitType {
@@ -461,9 +463,11 @@ export enum D2UIVars {
 }
 
 export enum D2ItemCode {
-    CowPortalScroll = '{89 ',
-    MagicBag        = 'mbg ',
-    Cube            = 'box ',
+    CowPortalScroll     = '{89 ',
+    TheIceCaveScroll    = '{91 ',
+    ThePowCityScroll    = '{92 ',
+    MagicBag            = 'mbg ',
+    Cube                = 'box ',
 }
 
 export namespace D2GSPacket {

@@ -13,11 +13,12 @@ export class D2Net extends D2Base {
     sendPending     : ArrayBuffer2[] = [];
     sendCallbacks   : ((packetId: D2ClientCmd, payload: ArrayBuffer2) => void)[] = [];
     recvCallbacks   : ((packetId: D2GSCmd, payload: ArrayBuffer2) => void)[] = [];
-    mainThreadId    = 0;
+
+    get mainThreadId() {
+        return D2Game.D2Client.mainThreadId;
+    }
 
     hook() {
-        this.mainThreadId = Process.enumerateThreads()[0].id;
-
         const D2Net_SendPacket = Interceptor2.jmp(
             this.addrs.D2Net.SendPacket,
             (size: number, arg2: number, buffer: NativePointer): number => {

@@ -387,9 +387,11 @@ class InvSortCmdHandler extends CmdHandler {
                     if (entry.quality?.length && !entry.quality.includes(D2Game.D2Common.Item.GetItemQuality(item)))
                         continue;
 
-                    const property = this.getItemProperty(item);
-                    if (!this.matchProperty(entry, property)) {
-                        continue;
+                    if (entry.properties?.length) {
+                        const property = this.getItemProperty(item);
+                        if (!this.matchProperty(entry, property)) {
+                            continue;
+                        }
                     }
 
                     // utils.log(`found: loc:${entry.location} page:${entry.page} \n******************\n${property.split('\n').reverse().join('\n')}\n******************\n`);
@@ -422,7 +424,7 @@ class InvSortCmdHandler extends CmdHandler {
             }
 
             for (const item of items[page]) {
-                utils.log(`    itemId:${item.ID}`)
+                utils.log(`  itemId:${item.ID}`)
 
                 const slot = await this.runOnMainThread(() => stash.findSlotsForItem(item));
                 if (!slot) {
@@ -432,9 +434,9 @@ class InvSortCmdHandler extends CmdHandler {
 
                 const unitId = item.ID;
 
-                utils.log('pickupBufferItem');
+                // utils.log('pickupBufferItem');
                 await this.pickupBufferItem(unitId);
-                utils.log('itemToBuffer');
+                // utils.log('itemToBuffer');
                 await this.itemToBuffer(unitId, slot!.x, slot!.y, D2ItemInvPage.Stash);
             }
 

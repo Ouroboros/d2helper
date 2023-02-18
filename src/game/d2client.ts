@@ -38,7 +38,7 @@ export class D2Client extends D2Base {
     commandHandler      : {[cmd: string]: ICommandHandler} = {};
 
     hook() {
-        this.mainThreadId = Process.enumerateThreads()[0].id;
+        // this.mainThreadId = Process.enumerateThreads()[0].id;
 
         const PeekMessageA = Interceptor2.jmp(
             API.USER32.PeekMessageA,
@@ -68,6 +68,8 @@ export class D2Client extends D2Base {
                     } else {
                         this.gameWindowProc = new NativeFunction(wndproc, 'pointer', ['pointer', 'uint32', 'pointer', 'pointer'], 'stdcall')
                     }
+
+                    this.mainThreadId = Process.getCurrentThreadId();
                 }
 
                 if (success) {
