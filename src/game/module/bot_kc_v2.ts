@@ -481,6 +481,8 @@ export class BotAutoKC {
             if (await this.gotoCow2())
                 return;
         }
+
+        await this.onFarming(levelNo);
     }
 
     async onFarming(levelNo: number) {
